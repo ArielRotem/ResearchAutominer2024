@@ -650,7 +650,7 @@ def process_column_tuples(data, start_column, columns, num_tuples, transformatio
     return data_copy
 
 
-def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples, allow_multiple_duplicates=False, output_file="heatmap.csv"):
+def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples, allow_multiple_duplicates=False, prefix_delimiter=" - ", output_file="heatmap.csv"):
     """
     Generate a heatmap matrix of unique Col1 (columns) and Col2 (rows), counting values from Col3.
 
@@ -660,6 +660,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     - columns_per_set (int): The number of columns in each set (e.g., 3 for Col1, Col2, Col3).
     - num_tuples (int): The number of column groups to process.
     - allow_multiple_duplicates (bool): If True, track all duplicate values; if False, only track the first value.
+    - prefix_delimiter (str): Delimiter to join Col5 and Col1 (default " - ").
     - output_file (str): Path to save the resulting heatmap CSV.
 
     Returns:
@@ -674,7 +675,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     # Process each row
     for idx, row in data.iterrows():
         # Reset seen combinations and track duplicates for this row
-        seen_combinations = defaultdict(set)
+        seen_combinations = {}
 
         # Process all column batches in this row
         for i in range(num_tuples):
@@ -682,6 +683,9 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
             col1_index = start_index + i * columns_per_set
             col2_index = col1_index + 1
             col3_index = col1_index + 2
+
+            # If columns_per_set >= 5, include Col5 as a prefix to Col1
+            col5_index = col1_index + 4 if columns_per_set >= 5 else None
 
             # Ensure indices are within bounds
             if col3_index >= len(data.columns):
@@ -692,24 +696,25 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
             col1_value = row.iloc[col1_index]
             col2_value = row.iloc[col2_index]
             col3_value = row.iloc[col3_index]
+            col5_value = row.iloc[col5_index] if col5_index and col5_index < len(data.columns) else None
 
             col1_value = col1_value if pd.notna(col1_value) and col1_value != "" else "Empty"
             col2_value = col2_value if pd.notna(col2_value) and col2_value != "" else "Empty"
             col3_value = col3_value if pd.notna(col3_value) and col3_value != "" else "Empty"
+            col5_value = col5_value if pd.notna(col5_value) and col5_value != "" else ""
+
+            # Combine Col5 and Col1 if applicable
+            if col5_value:
+                col1_value = f"{col5_value}{prefix_delimiter}{col1_value}"
 
             # Check for duplicates within this row
             combination_key = (col1_value, col2_value)
-            if (col1_value != "Empty" or col2_value != "Empty"):
-                seen_combinations[combination_key].add(col3_value)
-                # Trigger warning only if the set length becomes 2 (indicating differing values)
-                if len(seen_combinations[combination_key]) > 1:
-                    print(
-                        f"Warning: Duplicate Col1 X Col2 combination ({col1_value}, {col2_value}) for Row {idx}. "
-                        f"Values seen so far: {seen_combinations[combination_key]}"
-                    )
-                    # If duplicates are not allowed, skip updating heatmap for this duplicate
-                    if not allow_multiple_duplicates:
-                        continue
+            if combination_key in seen_combinations:
+                if not allow_multiple_duplicates:
+                    # Skip updating heatmap for duplicates when not allowed
+                    continue
+            else:
+                seen_combinations[combination_key] = col3_value
 
             # Update the heatmap
             heatmap[col2_value][col1_value][col3_value] += 1
@@ -728,11 +733,10 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     heatmap_df = pd.DataFrame(heatmap_dict, index=unique_rows)
 
     # Save to CSV
-    heatmap_df.to_csv(output_file, index_label="Col2")
+    heatmap_df.to_csv(output_file, index_label="Organism \ Antibiotic")
     print(f"Heatmap saved to {output_file}")
 
     return heatmap_df
-
 
 
 organism_dict = {
