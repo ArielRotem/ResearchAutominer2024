@@ -650,7 +650,7 @@ def process_column_tuples(data, start_column, columns, num_tuples, transformatio
     return data_copy
 
 
-def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples, output_file="heatmap.csv"):
+def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples, allow_multiple_duplicates=False, output_file="heatmap.csv"):
     """
     Generate a heatmap matrix of unique Col1 (columns) and Col2 (rows), counting values from Col3.
 
@@ -659,6 +659,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     - start_column (int or str): The index or name of the first column of the first tuple.
     - columns_per_set (int): The number of columns in each set (e.g., 3 for Col1, Col2, Col3).
     - num_tuples (int): The number of column groups to process.
+    - allow_multiple_duplicates (bool): If True, track all duplicate values; if False, only track the first value.
     - output_file (str): Path to save the resulting heatmap CSV.
 
     Returns:
@@ -672,8 +673,8 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
 
     # Process each row
     for idx, row in data.iterrows():
-        # Reset seen combinations for this row
-        seen_combinations = set()
+        # Reset seen combinations and track duplicates for this row
+        seen_combinations = defaultdict(list)
 
         # Process all column batches in this row
         for i in range(num_tuples):
@@ -698,10 +699,20 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
 
             # Check for duplicates within this row
             combination_key = (col1_value, col2_value)
-            if (col1_value != "Empty" or col2_value != "Empty") and combination_key in seen_combinations:
-                print(f"Warning: Duplicate Col1 X Col2 combination ({col1_value}, {col2_value}) for Row {idx}.")
-            else:
-                seen_combinations.add(combination_key)
+            if (col1_value != "Empty" or col2_value != "Empty"):
+                if combination_key in seen_combinations:
+                    # Append current value to the list of seen values for this combination
+                    seen_combinations[combination_key].append(col3_value)
+                    print(
+                        f"Warning: Duplicate Col1 X Col2 combination ({col1_value}, {col2_value}) for Row {idx}. "
+                        f"Values seen so far: {seen_combinations[combination_key]}"
+                    )
+                    # If duplicates are not allowed, skip updating heatmap for this duplicate
+                    if not allow_multiple_duplicates:
+                        continue
+                else:
+                    # Record the first occurrence
+                    seen_combinations[combination_key].append(col3_value)
 
             # Update the heatmap
             heatmap[col2_value][col1_value][col3_value] += 1
@@ -724,8 +735,6 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     print(f"Heatmap saved to {output_file}")
 
     return heatmap_df
-
-
 
 
 organism_dict = {
