@@ -674,7 +674,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     # Process each row
     for idx, row in data.iterrows():
         # Reset seen combinations and track duplicates for this row
-        seen_combinations = defaultdict(list)
+        seen_combinations = defaultdict(set)
 
         # Process all column batches in this row
         for i in range(num_tuples):
@@ -700,9 +700,9 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
             # Check for duplicates within this row
             combination_key = (col1_value, col2_value)
             if (col1_value != "Empty" or col2_value != "Empty"):
-                if combination_key in seen_combinations:
-                    # Append current value to the list of seen values for this combination
-                    seen_combinations[combination_key].append(col3_value)
+                seen_combinations[combination_key].add(col3_value)
+                # Trigger warning only if the set length becomes 2 (indicating differing values)
+                if len(seen_combinations[combination_key]) > 1:
                     print(
                         f"Warning: Duplicate Col1 X Col2 combination ({col1_value}, {col2_value}) for Row {idx}. "
                         f"Values seen so far: {seen_combinations[combination_key]}"
@@ -710,9 +710,6 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
                     # If duplicates are not allowed, skip updating heatmap for this duplicate
                     if not allow_multiple_duplicates:
                         continue
-                else:
-                    # Record the first occurrence
-                    seen_combinations[combination_key].append(col3_value)
 
             # Update the heatmap
             heatmap[col2_value][col1_value][col3_value] += 1
@@ -735,6 +732,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     print(f"Heatmap saved to {output_file}")
 
     return heatmap_df
+
 
 
 organism_dict = {
