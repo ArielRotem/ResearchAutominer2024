@@ -666,41 +666,44 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     """
     from collections import defaultdict
 
-    # Initialize structures
+    # Initialize the heatmap
     heatmap = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-    seen_combinations = defaultdict(set)
     start_index = column_name_to_index(data, start_column) if isinstance(start_column, str) else start_column
 
-    for i in range(num_tuples):
-        # Calculate indices for the current tuple
-        col1_index = start_index + i * columns_per_set
-        col2_index = col1_index + 1
-        col3_index = col1_index + 2
+    # Process each row
+    for idx, row in data.iterrows():
+        # Reset seen combinations for this row
+        seen_combinations = set()
 
-        # Ensure indices are within bounds
-        if col3_index >= len(data.columns):
-            print(f"Warning: Tuple {i+1} exceeds available columns. Stopping early.")
-            break
+        # Process all column batches in this row
+        for i in range(num_tuples):
+            # Calculate indices for the current tuple
+            col1_index = start_index + i * columns_per_set
+            col2_index = col1_index + 1
+            col3_index = col1_index + 2
 
-        # Process each row
-        for idx, row in data.iterrows():
+            # Ensure indices are within bounds
+            if col3_index >= len(data.columns):
+                print(f"Warning: Tuple {i+1} exceeds available columns. Stopping early.")
+                break
+
+            # Extract and normalize values
             col1_value = row.iloc[col1_index]
             col2_value = row.iloc[col2_index]
             col3_value = row.iloc[col3_index]
 
-            # Normalize values
-            col1_value = col1_value if pd.notna(col1_value) else "Empty"
-            col2_value = col2_value if pd.notna(col2_value) else "Empty"
-            col3_value = col3_value if pd.notna(col3_value) else "Empty"
+            col1_value = col1_value if pd.notna(col1_value) and col1_value != "" else "Empty"
+            col2_value = col2_value if pd.notna(col2_value) and col2_value != "" else "Empty"
+            col3_value = col3_value if pd.notna(col3_value) and col3_value != "" else "Empty"
 
-            # Check for duplicate combinations
-            combination_key = f"{col1_value} | {col2_value}"
-            if combination_key in seen_combinations[idx]:
+            # Check for duplicates within this row
+            combination_key = (col1_value, col2_value)
+            if (col1_value != "Empty" or col2_value != "Empty") and combination_key in seen_combinations:
                 print(f"Warning: Duplicate Col1 X Col2 combination ({col1_value}, {col2_value}) for Row {idx}.")
             else:
-                seen_combinations[idx].add(combination_key)
+                seen_combinations.add(combination_key)
 
-            # Update heatmap counts
+            # Update the heatmap
             heatmap[col2_value][col1_value][col3_value] += 1
 
     # Build the heatmap DataFrame
@@ -721,6 +724,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     print(f"Heatmap saved to {output_file}")
 
     return heatmap_df
+
 
 
 
@@ -1235,7 +1239,7 @@ def main():
     data = filtered_labor_data
     
     data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
-    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, output_file="heatmap.csv")
+    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=5 ,num_tuples=65, output_file="heatmap.csv")
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
