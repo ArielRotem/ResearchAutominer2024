@@ -660,7 +660,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     - columns_per_set (int): The number of columns in each set (e.g., 3 for Col1, Col2, Col3).
     - num_tuples (int): The number of column groups to process.
     - allow_multiple_duplicates (bool): If True, track all duplicate values; if False, only track the first value.
-    - prefix_delimiter (str): Delimiter to join Col5 and Col1 (default " - ").
+    - prefix_delimiter (str): Delimiter to join Col5 and Col2 (default " - ").
     - output_file (str): Path to save the resulting heatmap CSV.
 
     Returns:
@@ -684,7 +684,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
             col2_index = col1_index + 1
             col3_index = col1_index + 2
 
-            # If columns_per_set >= 5, include Col5 as a prefix to Col1
+            # If columns_per_set >= 5, include Col5 as a prefix to Col2
             col5_index = col1_index + 4 if columns_per_set >= 5 else None
 
             # Ensure indices are within bounds
@@ -703,9 +703,12 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
             col3_value = col3_value if pd.notna(col3_value) and col3_value != "" else "Empty"
             col5_value = col5_value if pd.notna(col5_value) and col5_value != "" else ""
 
-            # Combine Col5 and Col1 if applicable
+            # Combine Col5 and Col2 if applicable
             if col5_value:
-                col1_value = f"{col5_value}{prefix_delimiter}{col1_value}"
+                if col2_value != "Empty":
+                    col2_value = f"{col5_value}{prefix_delimiter}{col2_value}"
+                else:
+                    col2_value = col5_value
 
             # Check for duplicates within this row
             combination_key = (col1_value, col2_value)
@@ -733,7 +736,7 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     heatmap_df = pd.DataFrame(heatmap_dict, index=unique_rows)
 
     # Save to CSV
-    heatmap_df.to_csv(output_file, index_label="Organism \ Antibiotic")
+    heatmap_df.to_csv(output_file, index_label="Organism \\ Antibiotic")
     print(f"Heatmap saved to {output_file}")
 
     return heatmap_df
