@@ -1,4 +1,5 @@
 import pandas as pd
+from collections import defaultdict
 
 # Custom sort function
 def custom_sort(item):
@@ -573,6 +574,156 @@ def does_column_contain_string_in_category_list(data, column_name, new_column_na
     
     return data
 
+def process_column_tuples(data, start_column, columns, num_tuples, transformations=None, default_value=None, delimiter=" - "):
+    """
+    Processes groups of 3 columns in a DataFrame, creating new columns based on transformations.
+
+    Args:
+    - data (pd.DataFrame): The DataFrame to process.
+    - start_column (int or str): The index or name of the first column of the first tuple.
+    - num_tuples (int): The number of 3-column groups to process.
+    - transformations (dict, optional): A dictionary for transforming values in the third column. If None, use raw values.
+    - default_value (any, optional): The default value if a transformation is not found. If None, default to the original value.
+    - delimiter (str): The delimiter for combining values from the first two columns (default is " - ").
+
+    Returns:
+    - pd.DataFrame: A DataFrame with the new columns added.
+    """
+    data_copy = data.copy()
+    start_index = column_name_to_index(data_copy, start_column) if isinstance(start_column, str) else start_column
+
+    for i in range(num_tuples):
+        # Calculate indices for the current tuple
+        col1_index = start_index + i * columns
+        col2_index = col1_index + 1
+        col3_index = col1_index + 2
+
+        # Ensure indices are within bounds
+        if col3_index >= len(data_copy.columns):
+            print(f"Warning: Tuple {i+1} exceeds available columns. Stopping early.")
+            break
+
+        # Get column names
+        col1_name = data_copy.columns[col1_index]
+        col2_name = data_copy.columns[col2_index]
+        col3_name = data_copy.columns[col3_index]
+
+        # Process each row
+        def process_row(row):
+            col1_value = row.iloc[col1_index]
+            col2_value = row.iloc[col2_index]
+            col3_value = row.iloc[col3_index]
+
+            # Combine col1 and col2
+            if pd.notna(col1_value) and pd.notna(col2_value):
+                combined_name = f"{col1_value}{delimiter}{col2_value}"
+            elif pd.notna(col1_value) or pd.notna(col2_value):
+                combined_name = col1_value if pd.notna(col1_value) else col2_value
+                print(f"Warning: Row {row.name}, only one of {col1_name}/{col2_name} is non-empty.")
+            else:
+                return None  # Skip if both are empty
+
+            # Transform col3_value
+            if transformations:
+                transformed_value = transformations.get(
+                    str(col3_value),
+                    col3_value if default_value is None else default_value
+                )
+            else:
+                transformed_value = col3_value  # Use raw value if no transformations provided
+
+            # Assign the value to the new column
+            return combined_name, transformed_value
+
+        # Create new column
+        new_column_data = data_copy.apply(process_row, axis=1)
+
+        # Split the processed data into names and values
+        new_column_names = [item[0] if item else None for item in new_column_data]
+        new_column_values = [item[1] if item else None for item in new_column_data]
+
+        # Insert new columns dynamically
+        for idx, (name, value) in enumerate(zip(new_column_names, new_column_values)):
+            if name:
+                data_copy.at[idx, name] = value
+
+    return data_copy
+
+
+def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples, output_file="heatmap.csv"):
+    """
+    Generate a heatmap matrix of unique Col1 (columns) and Col2 (rows), counting values from Col3.
+
+    Args:
+    - data (pd.DataFrame): The DataFrame to process.
+    - start_column (int or str): The index or name of the first column of the first tuple.
+    - num_tuples (int): The number of 3-column groups to process.
+    - output_file (str): Path to save the resulting heatmap CSV.
+
+    Returns:
+    - pd.DataFrame: The heatmap matrix.
+    """
+    # Initialize structures
+    heatmap = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+    seen_combinations = defaultdict(set)
+    start_index = column_name_to_index(data, start_column) if isinstance(start_column, str) else start_column
+
+    for i in range(num_tuples):
+        # Calculate indices for the current tuple
+        col1_index = start_index + i * columns_per_set
+        col2_index = col1_index + 1
+        col3_index = col1_index + 2
+
+        # Ensure indices are within bounds
+        if col3_index >= len(data.columns):
+            print(f"Warning: Tuple {i+1} exceeds available columns. Stopping early.")
+            break
+
+        # Get column names
+        col1_name = data.columns[col1_index]
+        col2_name = data.columns[col2_index]
+        col3_name = data.columns[col3_index]
+
+        # Process each row
+        for idx, row in data.iterrows():
+            col1_value = row[col1_name]
+            col2_value = row[col2_name]
+            col3_value = row[col3_name]
+
+            # Normalize values (treat empty as "Empty")
+            col1_value = col1_value if pd.notna(col1_value) else "Empty"
+            col2_value = col2_value if pd.notna(col2_value) else "Empty"
+            col3_value = col3_value if pd.notna(col3_value) else "Empty"
+
+            # Check for duplicate combinations within the same patient
+            combination_key = f"{col1_value} | {col2_value}"
+            if combination_key in seen_combinations[idx]:
+                print(f"Warning: Duplicate Col1 X Col2 combination ({col1_value}, {col2_value}) for Row {idx}.")
+            else:
+                seen_combinations[idx].add(combination_key)
+
+            # Update heatmap counts
+            heatmap[col2_value][col1_value][col3_value] += 1
+
+    # Convert heatmap to a DataFrame
+    unique_cols = sorted({col for row_dict in heatmap.values() for col in row_dict.keys()})
+    unique_rows = sorted(heatmap.keys())
+    heatmap_df = pd.DataFrame(index=unique_rows, columns=unique_cols)
+
+    # Populate the DataFrame with string representations of the counting sets
+    for col2_value in unique_rows:
+        for col1_value in unique_cols:
+            count_dict = heatmap[col2_value][col1_value]
+            if count_dict:
+                heatmap_df.at[col2_value, col1_value] = str(dict(count_dict))
+            else:
+                heatmap_df.at[col2_value, col1_value] = ""
+
+    # Save to CSV
+    heatmap_df.to_csv(output_file, index_label="Col2")
+    print(f"Heatmap saved to {output_file}")
+
+    return heatmap_df
 
 
 organism_dict = {
@@ -1085,6 +1236,9 @@ def main():
     print(len(data)-len(filtered_labor_data), " rows without blood culture taken removed")
     data = filtered_labor_data
     
+    data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
+    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, output_file="heatmap.csv"):
+
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
         'reference occurrence number',
