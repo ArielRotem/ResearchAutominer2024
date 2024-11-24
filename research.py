@@ -657,12 +657,15 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
     Args:
     - data (pd.DataFrame): The DataFrame to process.
     - start_column (int or str): The index or name of the first column of the first tuple.
-    - num_tuples (int): The number of 3-column groups to process.
+    - columns_per_set (int): The number of columns in each set (e.g., 3 for Col1, Col2, Col3).
+    - num_tuples (int): The number of column groups to process.
     - output_file (str): Path to save the resulting heatmap CSV.
 
     Returns:
     - pd.DataFrame: The heatmap matrix.
     """
+    from collections import defaultdict
+
     # Initialize structures
     heatmap = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
     seen_combinations = defaultdict(set)
@@ -679,23 +682,18 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
             print(f"Warning: Tuple {i+1} exceeds available columns. Stopping early.")
             break
 
-        # Get column names
-        col1_name = data.columns[col1_index]
-        col2_name = data.columns[col2_index]
-        col3_name = data.columns[col3_index]
-
         # Process each row
         for idx, row in data.iterrows():
-            col1_value = row[col1_name]
-            col2_value = row[col2_name]
-            col3_value = row[col3_name]
+            col1_value = row.iloc[col1_index]
+            col2_value = row.iloc[col2_index]
+            col3_value = row.iloc[col3_index]
 
-            # Normalize values (treat empty as "Empty")
+            # Normalize values
             col1_value = col1_value if pd.notna(col1_value) else "Empty"
             col2_value = col2_value if pd.notna(col2_value) else "Empty"
             col3_value = col3_value if pd.notna(col3_value) else "Empty"
 
-            # Check for duplicate combinations within the same patient
+            # Check for duplicate combinations
             combination_key = f"{col1_value} | {col2_value}"
             if combination_key in seen_combinations[idx]:
                 print(f"Warning: Duplicate Col1 X Col2 combination ({col1_value}, {col2_value}) for Row {idx}.")
@@ -705,25 +703,25 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
             # Update heatmap counts
             heatmap[col2_value][col1_value][col3_value] += 1
 
-    # Convert heatmap to a DataFrame
+    # Build the heatmap DataFrame
     unique_cols = sorted({col for row_dict in heatmap.values() for col in row_dict.keys()})
     unique_rows = sorted(heatmap.keys())
-    heatmap_df = pd.DataFrame(index=unique_rows, columns=unique_cols)
+    heatmap_dict = {col1: [] for col1 in unique_cols}
 
-    # Populate the DataFrame with string representations of the counting sets
     for col2_value in unique_rows:
         for col1_value in unique_cols:
             count_dict = heatmap[col2_value][col1_value]
-            if count_dict:
-                heatmap_df.at[col2_value, col1_value] = str(dict(count_dict))
-            else:
-                heatmap_df.at[col2_value, col1_value] = ""
+            count_str = ", ".join(f"{k}: {v}" for k, v in count_dict.items()) if count_dict else ""
+            heatmap_dict[col1_value].append(count_str)
+
+    heatmap_df = pd.DataFrame(heatmap_dict, index=unique_rows)
 
     # Save to CSV
     heatmap_df.to_csv(output_file, index_label="Col2")
     print(f"Heatmap saved to {output_file}")
 
     return heatmap_df
+
 
 
 organism_dict = {
