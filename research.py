@@ -1237,7 +1237,7 @@ def main():
     data = filtered_labor_data
     
     data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
-    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, output_file="heatmap.csv"):
+    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, output_file="heatmap.csv")
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
