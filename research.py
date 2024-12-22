@@ -741,15 +741,16 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
 
     return heatmap_df
 
+
 def generate_patient_specific_dataset(data, start_column, columns_per_set, num_tuples, patient_id_column, additional_fields=[], output_file="patient_dataset.csv"):
     """
-    Generate a dataset where each row represents a unique Col1 value per patient,
-    mapping Col2 values to Col3 values.
+    Generate a dataset where each row represents a unique Virus (Col2 value) per patient,
+    mapping Antibiotic (Col1) to their Susceptibility (Col3) values.
 
     Args:
     - data (pd.DataFrame): The input DataFrame.
     - start_column (int or str): The index or name of the first column of the first tuple.
-    - columns_per_set (int): The number of columns in each set (e.g., 5 for Col1, Col2, Col3, Col4, Col5).
+    - columns_per_set (int): The number of columns in each set (e.g., 5 for Virus, Antibiotic, Susceptibility, ..., AlternativeVirusName).
     - num_tuples (int): The number of column groups to process.
     - patient_id_column (str): The name of the column representing patient IDs.
     - additional_fields (list of str): List of column names to include as additional fields.
@@ -767,7 +768,6 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
         output_file="patient_specific_dataset.csv"
     )
 
-
     Returns:
     - pd.DataFrame: The transformed dataset.
     """
@@ -780,44 +780,48 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
         patient_row = {field: row[field] for field in additional_fields}  # Add additional fields
         patient_row["PatientId"] = patient_id
 
-        # Map to store Col1 values and their corresponding Col2->Col3 mappings
+        # Map to store Virus (Col2) values and their corresponding Antibiotic->Susceptibility mappings
         patient_map = defaultdict(lambda: defaultdict(str))
 
         for i in range(num_tuples):
             # Calculate indices for the current tuple
-            col1_index = start_index + i * columns_per_set
-            col2_index = col1_index + 1
-            col3_index = col1_index + 2
-            col5_index = col1_index + 4
+            virus_index = start_index + i * columns_per_set + 1  # Col2 (Virus)
+            antibiotic_index = start_index + i * columns_per_set  # Col1 (Antibiotic)
+            susceptibility_index = start_index + i * columns_per_set + 2  # Col3 (Susceptibility)
+            alternative_virus_index = start_index + i * columns_per_set + 4  # Col5 (AlternativeVirusName)
 
             # Ensure indices are within bounds
-            if col5_index >= len(data.columns):
+            if alternative_virus_index >= len(data.columns):
                 print(f"Warning: Tuple {i+1} exceeds available columns. Stopping early.")
                 break
 
-            col1_value = row.iloc[col1_index]
-            col2_value = row.iloc[col2_index]
-            col3_value = row.iloc[col3_index]
-            col5_value = row.iloc[col5_index]
+            # Extract and normalize values
+            virus_value = row.iloc[virus_index]
+            antibiotic_value = row.iloc[antibiotic_index]
+            susceptibility_value = row.iloc[susceptibility_index]
+            alternative_virus_value = row.iloc[alternative_virus_index]
 
-            # Normalize empty values
-            col1_value = col1_value if pd.notna(col1_value) and col1_value != "" else "Empty"
-            col2_value = col2_value if pd.notna(col2_value) and col2_value != "" else "Empty"
-            col3_value = col3_value if pd.notna(col3_value) and col3_value != "" else "Empty"
-            col5_value = col5_value if pd.notna(col5_value) and col5_value != "" else ""
+            virus_value = virus_value if pd.notna(virus_value) and virus_value != "" else "Empty"
+            antibiotic_value = antibiotic_value if pd.notna(antibiotic_value) and antibiotic_value != "" else "Empty"
+            susceptibility_value = susceptibility_value if pd.notna(susceptibility_value) and susceptibility_value != "" else "Empty"
+            alternative_virus_value = alternative_virus_value if pd.notna(alternative_virus_value) and alternative_virus_value != "" else ""
 
-            # Append Col3 value to the Col1 -> Col2 map
-            if col2_value not in patient_map[col1_value]:
-                patient_map[col1_value][col2_value] = col3_value
+            # Append Susceptibility to the Virus->Antibiotic map
+            if antibiotic_value not in patient_map[virus_value]:
+                patient_map[virus_value][antibiotic_value] = susceptibility_value
             else:
-                patient_map[col1_value][col2_value] += f", {col3_value}"
+                patient_map[virus_value][antibiotic_value] += f", {susceptibility_value}"
 
         # Create rows for the new dataset
-        for col1_value, col2_map in patient_map.items():
-            new_row = {"PatientId": patient_id, "Col1Value": col1_value, "AlternativeCol5": col5_value}
-            # Populate Col2 values as columns
-            for col2_key, col3_values in col2_map.items():
-                new_row[col2_key] = col3_values
+        for virus_value, antibiotic_map in patient_map.items():
+            new_row = {
+                "PatientId": patient_id,
+                "Virus": virus_value,
+                "AlternativeVirusName": alternative_virus_value,
+            }
+            # Populate Antibiotic values as columns
+            for antibiotic_key, susceptibility_values in antibiotic_map.items():
+                new_row[antibiotic_key] = susceptibility_values
             # Add additional patient fields
             new_row.update(patient_row)
             patient_data.append(new_row)
