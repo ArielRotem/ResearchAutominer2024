@@ -741,6 +741,99 @@ def generate_heatmap_with_counts(data, start_column, columns_per_set, num_tuples
 
     return heatmap_df
 
+def generate_patient_specific_dataset(data, start_column, columns_per_set, num_tuples, patient_id_column, additional_fields=[], output_file="patient_dataset.csv"):
+    """
+    Generate a dataset where each row represents a unique Col1 value per patient,
+    mapping Col2 values to Col3 values.
+
+    Args:
+    - data (pd.DataFrame): The input DataFrame.
+    - start_column (int or str): The index or name of the first column of the first tuple.
+    - columns_per_set (int): The number of columns in each set (e.g., 5 for Col1, Col2, Col3, Col4, Col5).
+    - num_tuples (int): The number of column groups to process.
+    - patient_id_column (str): The name of the column representing patient IDs.
+    - additional_fields (list of str): List of column names to include as additional fields.
+    - output_file (str): Path to save the resulting dataset.
+
+    usage:
+    # Generate the new patient-specific dataset
+    result_df = generate_patient_specific_dataset(
+        data=data,
+        start_column="organisms susceptability-antibiotic_1",
+        columns_per_set=5,
+        num_tuples=65,
+        patient_id_column="PatientId",
+        additional_fields=["birth-gestational age", "birth-fetus count"],
+        output_file="patient_specific_dataset.csv"
+    )
+
+
+    Returns:
+    - pd.DataFrame: The transformed dataset.
+    """
+    start_index = column_name_to_index(data, start_column) if isinstance(start_column, str) else start_column
+    patient_data = []
+
+    # Process each row (patient)
+    for idx, row in data.iterrows():
+        patient_id = row[patient_id_column]
+        patient_row = {field: row[field] for field in additional_fields}  # Add additional fields
+        patient_row["PatientId"] = patient_id
+
+        # Map to store Col1 values and their corresponding Col2->Col3 mappings
+        patient_map = defaultdict(lambda: defaultdict(str))
+
+        for i in range(num_tuples):
+            # Calculate indices for the current tuple
+            col1_index = start_index + i * columns_per_set
+            col2_index = col1_index + 1
+            col3_index = col1_index + 2
+            col5_index = col1_index + 4
+
+            # Ensure indices are within bounds
+            if col5_index >= len(data.columns):
+                print(f"Warning: Tuple {i+1} exceeds available columns. Stopping early.")
+                break
+
+            col1_value = row.iloc[col1_index]
+            col2_value = row.iloc[col2_index]
+            col3_value = row.iloc[col3_index]
+            col5_value = row.iloc[col5_index]
+
+            # Normalize empty values
+            col1_value = col1_value if pd.notna(col1_value) and col1_value != "" else "Empty"
+            col2_value = col2_value if pd.notna(col2_value) and col2_value != "" else "Empty"
+            col3_value = col3_value if pd.notna(col3_value) and col3_value != "" else "Empty"
+            col5_value = col5_value if pd.notna(col5_value) and col5_value != "" else ""
+
+            # Append Col3 value to the Col1 -> Col2 map
+            if col2_value not in patient_map[col1_value]:
+                patient_map[col1_value][col2_value] = col3_value
+            else:
+                patient_map[col1_value][col2_value] += f", {col3_value}"
+
+        # Create rows for the new dataset
+        for col1_value, col2_map in patient_map.items():
+            new_row = {"PatientId": patient_id, "Col1Value": col1_value, "AlternativeCol5": col5_value}
+            # Populate Col2 values as columns
+            for col2_key, col3_values in col2_map.items():
+                new_row[col2_key] = col3_values
+            # Add additional patient fields
+            new_row.update(patient_row)
+            patient_data.append(new_row)
+
+    # Convert to DataFrame
+    result_df = pd.DataFrame(patient_data)
+
+    # Fill missing columns with empty strings
+    result_df = result_df.fillna("")
+
+    # Save to CSV
+    result_df.to_csv(output_file, index=False)
+    print(f"Dataset saved to {output_file}")
+
+    return result_df
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
