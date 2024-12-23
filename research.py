@@ -815,15 +815,20 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
         # Create rows for the new dataset
         for virus_value, antibiotic_map in patient_map.items():
             new_row = {
-                "PatientId": patient_id,
-                "Virus": virus_value,
-                "AlternativeVirusName": virus_map.get(virus_value, ""),
+                "PatientId": patient_id,  # Always at the top
+                "Virus": virus_value,  # Second field
+                "AlternativeVirusName": virus_map.get(virus_value, ""),  # Third field
             }
-            # Populate Antibiotic values as columns
+
+            # Add patient_row fields after the first three fields
+            for key, value in patient_row.items():
+                new_row[key] = value
+
+            # Populate Antibiotic values as additional columns
             for antibiotic_key, susceptibility_values in antibiotic_map.items():
                 new_row[antibiotic_key] = susceptibility_values
-            # Add additional patient fields
-            new_row.update(patient_row)
+
+            # Append the ordered row to patient_data
             patient_data.append(new_row)
 
     # Convert to DataFrame
