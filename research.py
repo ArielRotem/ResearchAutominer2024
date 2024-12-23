@@ -756,18 +756,6 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
     - additional_fields (list of str): List of column names to include as additional fields.
     - output_file (str): Path to save the resulting dataset.
 
-    usage:
-    # Generate the new patient-specific dataset
-    result_df = generate_patient_specific_dataset(
-        data=data,
-        start_column="organisms susceptability-antibiotic_1",
-        columns_per_set=5,
-        num_tuples=65,
-        patient_id_column="PatientId",
-        additional_fields=["birth-gestational age", "birth-fetus count"],
-        output_file="patient_specific_dataset.csv"
-    )
-
     Returns:
     - pd.DataFrame: The transformed dataset.
     """
@@ -780,7 +768,8 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
         patient_row = {field: row[field] for field in additional_fields}  # Add additional fields
         patient_row["PatientId"] = patient_id
 
-        # Map to store Virus (Col2) values and their corresponding Antibiotic->Susceptibility mappings
+        # Maps to store Virus→AlternativeVirusName and Virus→Antibiotic→Susceptibility mappings
+        virus_map = {}
         patient_map = defaultdict(lambda: defaultdict(str))
 
         for i in range(num_tuples):
@@ -795,29 +784,40 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
                 print(f"Warning: Tuple {i+1} exceeds available columns. Stopping early.")
                 break
 
-            # Extract and normalize values
-            virus_value = row.iloc[virus_index]
-            antibiotic_value = row.iloc[antibiotic_index]
-            susceptibility_value = row.iloc[susceptibility_index]
-            alternative_virus_value = row.iloc[alternative_virus_index]
+            # Extract values without replacing with placeholders
+            virus_value = row.iloc[virus_index] if pd.notna(row.iloc[virus_index]) and row.iloc[virus_index] != "" else None
+            antibiotic_value = row.iloc[antibiotic_index] if pd.notna(row.iloc[antibiotic_index]) and row.iloc[antibiotic_index] != "" else None
+            susceptibility_value = row.iloc[susceptibility_index] if pd.notna(row.iloc[susceptibility_index]) and row.iloc[susceptibility_index] != "" else None
+            alternative_virus_value = row.iloc[alternative_virus_index] if pd.notna(row.iloc[alternative_virus_index]) and row.iloc[alternative_virus_index] != "" else None
 
-            virus_value = virus_value if pd.notna(virus_value) and virus_value != "" else "Empty"
-            antibiotic_value = antibiotic_value if pd.notna(antibiotic_value) and antibiotic_value != "" else "Empty"
-            susceptibility_value = susceptibility_value if pd.notna(susceptibility_value) and susceptibility_value != "" else "Empty"
-            alternative_virus_value = alternative_virus_value if pd.notna(alternative_virus_value) and alternative_virus_value != "" else ""
+            # Skip if Virus key (Col2) is empty
+            if not virus_value:
+                continue
 
-            # Append Susceptibility to the Virus->Antibiotic map
-            if antibiotic_value not in patient_map[virus_value]:
-                patient_map[virus_value][antibiotic_value] = susceptibility_value
-            else:
-                patient_map[virus_value][antibiotic_value] += f", {susceptibility_value}"
+            # Add alternative virus name to the map
+            if virus_value not in virus_map and alternative_virus_value:
+                virus_map[virus_value] = alternative_virus_value
+
+            # Handle empty Antibiotic key (Col1)
+            if not antibiotic_value:
+                # Ensure the virus is added to the patient map with no antibiotic key
+                if virus_value not in patient_map:
+                    patient_map[virus_value] = {}
+                continue  # Skip the rest of the logic for this tuple
+
+            # Append Susceptibility value to the Virus→Antibiotic map, if it's non-empty
+            if susceptibility_value:
+                if antibiotic_value not in patient_map[virus_value]:
+                    patient_map[virus_value][antibiotic_value] = susceptibility_value
+                else:
+                    patient_map[virus_value][antibiotic_value] += f", {susceptibility_value}"
 
         # Create rows for the new dataset
         for virus_value, antibiotic_map in patient_map.items():
             new_row = {
                 "PatientId": patient_id,
                 "Virus": virus_value,
-                "AlternativeVirusName": alternative_virus_value,
+                "AlternativeVirusName": virus_map.get(virus_value, ""),
             }
             # Populate Antibiotic values as columns
             for antibiotic_key, susceptibility_values in antibiotic_map.items():
@@ -837,6 +837,45 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
     print(f"Dataset saved to {output_file}")
 
     return result_df
+
+
+def concat_values_across_batches(data, nth_column, step_size, num_steps, output_column_name):
+    """
+    Concatenate values from a specific starting column (nth_column) and subsequent batches, removing duplicates and empty values.
+
+    Args:
+    - data (pd.DataFrame): The input DataFrame.
+    - nth_column (int or str): The starting column for the first batch.
+    - step_size (int): The number of columns to skip between batches.
+    - num_steps (int): The total number of batches to process.
+    - output_column_name (str): The name of the new column to store the concatenated results.
+
+    Returns:
+    - pd.DataFrame: The DataFrame with the new column added.
+    """
+    start_index = column_name_to_index(data, nth_column) if isinstance(nth_column, str) else nth_column
+    output_values = []
+
+    for idx, row in data.iterrows():
+        value_set = set()
+
+        for step in range(num_steps):
+            column_index = start_index + step * step_size  # Calculate the column index for the current batch
+            if column_index >= len(data.columns):
+                print(f"Warning: Step {step + 1} exceeds available columns. Stopping early for row {idx}.")
+                break
+
+            value = row.iloc[column_index]
+            if pd.notna(value) and value != "":  # Skip empty values
+                value_set.add(value)
+
+        # Join unique, non-empty values with ", "
+        output_values.append(", ".join(sorted(value_set)))
+
+    # Add the concatenated results as a new column
+    data[output_column_name] = output_values
+    print(f"Column '{output_column_name}' added with concatenated values.")
+    return data
 
 
 organism_dict = {
