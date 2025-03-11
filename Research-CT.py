@@ -124,7 +124,7 @@ def update_column_with_values(data, column_name, words_dict, default_value="0", 
             if any(word.lower() in cell_value_lower for word in words):
                 return key
         if cell_value != "":
-            print(f"Failed to translate dictionary value! Col:{column_letter} Value:{cell_value}")
+            print(f"Failed to translate dictionary value! Col:{column_name} Value:{cell_value}")
             return default_value  # Use the specified default value if no matches found
         return ""
 
@@ -336,7 +336,7 @@ def is_empty(data, column_name, new_column_name, value_empty=1, value_not_empty=
     data[new_column_name] = data.iloc[:, column_index].apply(lambda x: value_not_empty if pd.notna(x) and x != '' else value_empty)
     return data
 
-def filter_numbers(data, column_name, lowerThan=None, higherThan=None):
+def filter_numbers(data, column_name, lowerThan=None, higherThan=None, emptyOk=True):
     """
     Filters numbers in a column based on specified thresholds.
     
@@ -352,6 +352,8 @@ def filter_numbers(data, column_name, lowerThan=None, higherThan=None):
     column_index = column_name_to_index(data, column_name)
     def filter_val(x):
         try:
+            if (emptyOk and (x is None or x == "")):
+                return x
             num = float(x)
             if (lowerThan is not None and num < lowerThan) or (higherThan is not None and num > higherThan):
                 return ''
@@ -885,6 +887,110 @@ def concat_values_across_batches(data, nth_column, step_size, num_steps, output_
     return data
 
 
+def extract_and_filter_raw_map(data, input_column, substrings, new_column_name):
+    """
+    Extract a dictionary from raw map-like data, filter by a list of substrings, and save to a new column.
+    
+    Args:
+    - data (pd.DataFrame): The DataFrame to process.
+    - input_column (str): The name of the column containing the raw map-like data.
+    - substrings (list of str): The list of substrings to filter keys by (case-insensitive).
+    - new_column_name (str): The name of the new column to save the filtered dictionaries.
+    
+    Returns:
+    - pd.DataFrame: Updated DataFrame with the new column.
+    """
+    substrings_lower = [s.lower() for s in substrings]
+
+    def process_row(row):
+        # Split the row into key-value tokens by ";"
+        tokens = row.split(";")
+        row_dict = {}
+        duplicate_keys = set()
+
+        for token in tokens:
+            if "Key:" in token and "Value:" in token:
+                key_value = token.split("Value:", 1)
+                key = key_value[0].replace("Key:", "").strip()
+                value = key_value[1].strip() if len(key_value) > 1 else ""
+            elif "Key:" in token:
+                key = token.replace("Key:", "").strip()
+                value = ""
+            else:
+                continue
+
+            # Check for duplicate keys
+            if key in row_dict:
+                duplicate_keys.add(key)
+            row_dict[key] = value
+
+        # Print an error if duplicate keys are found
+        if duplicate_keys:
+            print(f"Duplicate keys found in row:.. Duplicates: {duplicate_keys}")
+
+        # Filter the dictionary for keys containing any of the substrings (case-insensitive)
+        filtered_dict = {
+            k: v for k, v in row_dict.items() if any(sub in k.lower() for sub in substrings_lower)
+        }
+        return filtered_dict
+
+    # Apply the process_row function to each row
+    data[new_column_name] = data[input_column].apply(process_row)
+    return data
+
+def summarize_keys_and_values_in_raw_map(data, input_column, output_file):
+    """
+    Summarize unique keys and their corresponding unique values in raw map-like data, 
+    and save the result with flipped axis: keys as columns and unique values as rows.
+    
+    Args:
+    - data (pd.DataFrame): The DataFrame to process.
+    - input_column (str): The name of the column containing the raw map-like data.
+    - output_file (str): The CSV file to save the summarized data.
+    
+    Returns:
+    - pd.DataFrame: A summary DataFrame with keys as columns and unique values as rows.
+    """
+    from collections import defaultdict
+
+    # Dictionary to store keys and sets of unique values
+    key_value_map = defaultdict(set)
+
+    def process_row(row):
+        # Split the row into key-value tokens by ";"
+        tokens = row.split(";")
+        for token in tokens:
+            if "Key:" in token and "Value:" in token:
+                key_value = token.split("Value:", 1)
+                key = key_value[0].replace("Key:", "").strip()
+                value = key_value[1].strip() if len(key_value) > 1 else ""
+            elif "Key:" in token:
+                key = token.replace("Key:", "").strip()
+                value = ""
+            else:
+                continue
+
+            key_value_map[key].add(value)
+
+    # Apply the process_row function to each row
+    data[input_column].apply(process_row)
+
+    # Convert key-value map to a DataFrame with keys as columns and unique values as rows
+    max_values = max(len(values) for values in key_value_map.values())  # Find the max number of values for padding
+    summary_data = {}
+
+    for key, values in key_value_map.items():
+        summary_data[key] = list(values) + [""] * (max_values - len(values))  # Pad with empty strings for uniform length
+
+    summary_df = pd.DataFrame(summary_data)
+
+    # Save to CSV
+    summary_df.to_csv(output_file, index=False)
+    print(f"Summary saved to {output_file}")
+
+    return summary_df
+
+
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -1094,6 +1200,7 @@ def main():
     #data = remove_rows_above_threshold(data, 'birth-fetus count', 1)
     #print(len(over_threshold_data)-len(data), " rows with fetus count above 1 removed")
 
+    data = de_dupe_data
 
     ## Cultures taken yes/no Follow by Positive yes/no
     data = containswords_result_exists(data, 'blood cultures-test type_1', ['דם'], 4, 40, 'blood_culture_taken')
@@ -1273,16 +1380,16 @@ def main():
 
     
     # Check if the cell value in maternal diagnosis column is empty or not, and returns 1 if its not, 0 if it is.
-    data = is_empty(data, 'maternal pregestaional diabetes-diagnosis', 'maternal_pregestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'maternal gestational diabetes-diagnosis', 'maternal_gestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'maternal pregestational hypertension-diagnosis', 'maternal_pregestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'maternal gestational hypertension-diagnosis', 'maternal_gestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'maternal hellp syndrome-diagnosis', 'maternal_hellp_syndrome_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'maternal pph-diagnosis', 'maternal_pph_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'blood products given-medication', 'blood_products_given_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'maternal vte_after delivery-diagnosis', 'maternal vte_after_delivery_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'maternal vte_before delivery-diagnosis', 'maternal vte_before_delivery_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, ' maternal infection post partum-diagnosis', 'maternal_infection_post_partum_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal pregestaional diabetes-diagnosis', 'maternal_pregestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal gestational diabetes-diagnosis', 'maternal_gestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal pregestational hypertension-diagnosis', 'maternal_pregestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal gestational hypertension-diagnosis', 'maternal_gestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal hellp syndrome-diagnosis', 'maternal_hellp_syndrome_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal pph-diagnosis', 'maternal_pph_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'blood products given-medication', 'blood_products_given_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal vte_after delivery-diagnosis', 'maternal vte_after_delivery_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal vte_before delivery-diagnosis', 'maternal vte_before_delivery_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal infection post partum-diagnosis', 'maternal_infection_post_partum_yes_or_no', value_empty=0, value_not_empty=1)
   
     # Check if numeric values in column 'AV' meet or exceed the cutoff of __, and add results in a new column '___'
     data = cutoff_number(data, 'rom description-date of membranes rupture-hours from reference', 'duration_of_rom_over_18h', 18, above=1, below=0, empty_value='')
@@ -1305,70 +1412,86 @@ def main():
     generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=6 ,num_tuples=206, output_file="heatmap.csv")
 
     data = concat_values_across_batches(data, "antibiotics-medication_1", 3, 108, "concat_antibiotics_given" )  # antibiotics-medication_1 3 X 108
-    result_df = generate_patient_specific_dataset(
+    #result_df = generate_patient_specific_dataset(
+    #    data=data,
+    #    start_column="organisms susceptability-antibiotic_1",
+    #    columns_per_set=6,
+    #    num_tuples=206,
+    #    patient_id_column="patient id",
+    #    additional_fields=["concat_antibiotics_given", "birth-gestational age", "blood_culture_organisms", "blood_culture_organisms_category"],
+    #    output_file="patient_specific_dataset.csv"
+    #)
+
+    summary = summarize_keys_and_values_in_raw_map(
         data=data,
-        start_column="organisms susceptability-antibiotic_1",
-        columns_per_set=6,
-        num_tuples=206,
-        patient_id_column="patient id",
-        additional_fields=["concat_antibiotics_given", "birth-gestational age", "blood_culture_organisms", "blood_culture_organisms_category"],
-        output_file="patient_specific_dataset.csv"
+        input_column="scrub-all row data",
+        output_file="key_value_summary.csv"
     )
 
+    # Apply the function
+    data = extract_and_filter_raw_map(
+        data=data,
+        input_column="scrub-all row data",
+        substrings=["General", "Alcohol", "Chlorhexidine"],
+        new_column_name="Filtered_Keys"
+    )
+
+
+
     # Remove specified columns, including single columns and ranges
-    data = remove_columns(data, [
-        'reference occurrence number',
-        'date of birth~date of death - days from delivery',
-        'date of first documentation - birth occurence',
-        'hospital admission date',
-        'hospital discharge date',
-        
-        
-        
-        'second and third stage timeline-time of full dilation',
-        'gbs status-gbs in urine','gbs status-gbs vagina',
-        'fever temperature numeric_max 37.5-43-date of measurement',
-        'onset of fever 38 until delivery-date of measurement-hours from reference',
-        'onset of fever 38 until delivery-date of measurement',
-        'wbc max-collection date-hours from reference',
-        'crp max-collection date-hours from reference',
-        'transfers-department admission date-days from reference',
-        'transfers-department discharge date-days from reference',
-        'readmission-hospital admission date-days from reference',
-        'readmission-hospital admission date',
-        'readmission-hospital discharge date-days from reference',
-        'readmission-hospital discharge date',
-        'cultures-test type_1~cultures-stain_61',
-        'surgery before delivery-date of procedure-days from reference_1~surgery before delivery-date of procedure copy_1',
-        'surgery before delivery-department_1~surgery after delivery-date of procedure copy_1',
-        'surgery after delivery-department_1~surgery after delivery-department_2',
-        'imaging-exam performed (sps)_1~imaging-performed procedures_7',
-        'antibiotics-date administered-hours from reference_1~antibiotics-medication_108',
-        'surgery indication-type of surgery',
-        'obstetric formula-number of abortions (ab)',
-        'obstetric formula-number of births (p)',
-        'obstetric formula-number of ectopic pregnancies (eup)',
-        'obstetric formula-number of live children (lc)',
-        'obstetric formula-number of pregnancies (g)',
-        'surgery before delivery-procedure_1',
-        'surgery after delivery-procedure_1',
-        'maternal pregestaional diabetes-diagnosis',	
-        'maternal gestational diabetes-diagnosis',	
-        'maternal pregestational hypertension-diagnosis',	
-        'maternal gestational hypertension-diagnosis',	
-        'maternal hellp syndrome-diagnosis',	
-        'maternal pph-diagnosis',
-        'blood products given-medication',
-        'penicillin clindamycin prophylaxis-date administered-hours from reference',
-        'penicillin clindamycin prophylaxis-date administered',	
-        'penicillin clindamycin prophylaxis-medication',	
-        'ampicillin prophylaxis-date administered-hours from reference',	
-        'ampicillin prophylaxis-date administered',	
-        'ampicillin prophylaxis-medication',
-        'penicillin/clindamycin timing calculated',	
-        'ampicillin timing calculated',
-        'blood_culture_taken'
-        ])
+    #data = remove_columns(data, [
+    #    'reference occurrence number',
+    #    'date of birth~date of death - days from delivery',
+    #    'date of first documentation - birth occurence',
+    #    'hospital admission date',
+    #    'hospital discharge date',
+    #    
+    #    
+    #    
+    #    'second and third stage timeline-time of full dilation',
+    #    'gbs status-gbs in urine','gbs status-gbs vagina',
+    #    'fever temperature numeric_max 37.5-43-date of measurement',
+    #    'onset of fever 38 until delivery-date of measurement-hours from reference',
+    #    'onset of fever 38 until delivery-date of measurement',
+    #    'wbc max-collection date-hours from reference',
+    #    'crp max-collection date-hours from reference',
+    #    'transfers-department admission date-days from reference',
+    #    'transfers-department discharge date-days from reference',
+    #    'readmission-hospital admission date-days from reference',
+    #    'readmission-hospital admission date',
+    #    'readmission-hospital discharge date-days from reference',
+    #    'readmission-hospital discharge date',
+    #    'cultures-test type_1~cultures-stain_61',
+    #    'surgery before delivery-date of procedure-days from reference_1~surgery before delivery-date of procedure copy_1',
+    #    'surgery before delivery-department_1~surgery after delivery-date of procedure copy_1',
+    #    'surgery after delivery-department_1~surgery after delivery-department_2',
+    #    'imaging-exam performed (sps)_1~imaging-performed procedures_7',
+    #    'antibiotics-date administered-hours from reference_1~antibiotics-medication_108',
+    #    'surgery indication-type of surgery',
+    #    'obstetric formula-number of abortions (ab)',
+    #    'obstetric formula-number of births (p)',
+    #    'obstetric formula-number of ectopic pregnancies (eup)',
+    #    'obstetric formula-number of live children (lc)',
+    #    'obstetric formula-number of pregnancies (g)',
+    #    'surgery before delivery-procedure_1',
+    #    'surgery after delivery-procedure_1',
+    #    'maternal pregestaional diabetes-diagnosis',	
+    #    'maternal gestational diabetes-diagnosis',	
+    #    'maternal pregestational hypertension-diagnosis',	
+    #    'maternal gestational hypertension-diagnosis',	
+    #    'maternal hellp syndrome-diagnosis',	
+    #    'maternal pph-diagnosis',
+    #    'blood products given-medication',
+    #    'penicillin clindamycin prophylaxis-date administered-hours from reference',
+    #    'penicillin clindamycin prophylaxis-date administered',	
+    #    'penicillin clindamycin prophylaxis-medication',	
+    #    'ampicillin prophylaxis-date administered-hours from reference',	
+    #    'ampicillin prophylaxis-date administered',	
+    #    'ampicillin prophylaxis-medication',
+    #    'penicillin/clindamycin timing calculated',	
+    #    'ampicillin timing calculated',
+    #    'blood_culture_taken'
+    #    ])
 
 
     ##save_data(data, output_filepath)
