@@ -990,6 +990,93 @@ def summarize_keys_and_values_in_raw_map(data, input_column, output_file):
 
     return summary_df
 
+def categorize_packed_cells(data, before_col, after_col, result_received, result_before, result_after):
+    """
+    Categorize whether a patient received packed cells before/after birth and count the number of units.
+    """
+    before_idx = column_name_to_index(data, before_col)
+    after_idx = column_name_to_index(data, after_col)
+    
+    def process_row(row):
+        packed_before = row.iloc[before_idx] if pd.notna(row.iloc[before_idx]) else 0
+        packed_after = row.iloc[after_idx] if pd.notna(row.iloc[after_idx]) else 0
+        received = 1 if (packed_before > 0 or packed_after > 0) else 0
+        return pd.Series([received, packed_before, packed_after])
+    
+    data[[result_received, result_before, result_after]] = data.apply(process_row, axis=1)
+    return data
+
+def categorize_uterotonics(data, column, result_col):
+    """
+    Categorize whether a patient received uterotonics (Cytotec, Methergin, both, or none).
+    """
+    col_idx = column_name_to_index(data, column)
+    
+    def classify_uterotonics(row):
+        if pd.isna(row.iloc[col_idx]):
+            return 0  # No uterotonics
+        value = str(row.iloc[col_idx]).lower()
+        cytotec = "ציטוטק" in value
+        methergin = "מטרגין" in value
+        if cytotec and methergin:
+            return 3  # Both
+        elif cytotec:
+            return 1  # Cytotec only
+        elif methergin:
+            return 2  # Methergin only
+        return 0
+    
+    data[result_col] = data.apply(classify_uterotonics, axis=1)
+    return data
+
+def categorize_full_dilation(data, column, result_col):
+    """
+    Determine if full dilation (10 cm) was reached at surgery.
+    """
+    col_idx = column_name_to_index(data, column)
+    data[result_col] = data.apply(lambda row: 1 if row.iloc[col_idx] == 10 else 0, axis=1)
+    return data
+
+def categorize_surgery_time(data, column, result_col):
+    """
+    Categorize surgery times into Day, Evening, or Night.
+    """
+    col_idx = column_name_to_index(data, column)
+    
+    def classify_time(row):
+        if pd.isna(row.iloc[col_idx]):
+            return "Unknown"
+        try:
+            hour = pd.to_datetime(row.iloc[col_idx]).hour
+            if 7 <= hour < 16:
+                return "Day"
+            elif 16 <= hour < 21:
+                return "Evening"
+            else:
+                return "Night"
+        except Exception:
+            return "Unknown"
+    
+    data[result_col] = data.apply(classify_time, axis=1)
+    return data
+
+def process_length_of_stay(data, room_entry_col, room_exit_col, ref_col, result_col):
+    """
+    Calculate and classify length of stay in the delivery room based on entry and exit times.
+    """
+    entry_idx = column_name_to_index(data, room_entry_col)
+    exit_idx = column_name_to_index(data, room_exit_col)
+    ref_idx = column_name_to_index(data, ref_col)
+    
+    def compute_duration(row):
+        if pd.isna(row.iloc[entry_idx]) or pd.isna(row.iloc[exit_idx]):
+            return "Unknown"
+        duration = (pd.to_datetime(row.iloc[exit_idx]) - pd.to_datetime(row.iloc[entry_idx])).total_seconds() / 3600
+        ref_hours = row.iloc[ref_idx] if pd.notna(row.iloc[ref_idx]) else 0
+        return "Before Birth" if ref_hours < 0 else "After Birth"
+    
+    data[result_col] = data.apply(compute_duration, axis=1)
+    return data
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -1436,6 +1523,20 @@ def main():
         new_column_name="Filtered_Keys"
     )
 
+     # Apply packed cells categorization
+    data = categorize_packed_cells(data, 'packed_cells_before_col', 'packed_cells_after_col', 'packed_cells_received')
+
+    # Apply uterotonics categorization
+    data = categorize_uterotonics(data, 'uterotonics_column', 'uterotonics_received')
+
+    # Apply full dilation check
+    data = categorize_full_dilation(data, 'dilation_column', 'full_dilation_at_surgery')
+
+    # Apply surgery time categorization
+    data = categorize_surgery_time(data, 'surgery_start_time', 'surgery_time_category')
+
+    # Apply length of stay processing
+    data = process_length_of_stay(data, 'room_enter_date', 'room_exit_date', 'room_exit_hours_from_reference', 'length_of_stay_category')
 
 
     # Remove specified columns, including single columns and ranges
