@@ -990,21 +990,35 @@ def summarize_keys_and_values_in_raw_map(data, input_column, output_file):
 
     return summary_df
 
-def categorize_packed_cells(data, before_col, after_col, result_received, result_before, result_after):
+def categorize_packed_cells(data, before_col, after_col, step, num_before_batches, num_after_batches, result_received, result_before, result_after):
     """
-    Categorize whether a patient received packed cells before/after birth and count the number of units.
+    Categorize whether a patient received packed cells before/after birth and count occurrences.
     """
     before_idx = column_name_to_index(data, before_col)
     after_idx = column_name_to_index(data, after_col)
     
     def process_row(row):
-        packed_before = row.iloc[before_idx] if pd.notna(row.iloc[before_idx]) else 0
-        packed_after = row.iloc[after_idx] if pd.notna(row.iloc[after_idx]) else 0
-        received = 1 if (packed_before > 0 or packed_after > 0) else 0
-        return pd.Series([received, packed_before, packed_after])
+        count_before = 0
+        count_after = 0
+        
+        # Count occurrences of packed cells in "before" columns
+        for i in range(num_before_batches):
+            idx = before_idx + (i * step)
+            if pd.notna(row.iloc[idx]):
+                count_before += 1
+        
+        # Count occurrences of packed cells in "after" columns
+        for i in range(num_after_batches):
+            idx = after_idx + (i * step)
+            if pd.notna(row.iloc[idx]):
+                count_after += 1
+        
+        received = 1 if (count_before + count_after) > 0 else 0
+        return pd.Series([received, count_before, count_after])
     
     data[[result_received, result_before, result_after]] = data.apply(process_row, axis=1)
     return data
+
 
 def categorize_uterotonics(data, column, result_col):
     """
@@ -1577,8 +1591,12 @@ def main():
         new_column_name="Filtered_Keys"
     )
 
-     # Apply packed cells categorization
-    data = categorize_packed_cells(data, 'packed_cells_before_col', 'packed_cells_after_col', 'packed_cells_received')
+    data = categorize_packed_cells(data, 'packed_cells_before_1', 'packed_cells_after_1', step=2, 
+                               num_before_batches=5, num_after_batches=3, 
+                               result_received='packed_cells_received', 
+                               result_before='packed_cells_before_count', 
+                               result_after='packed_cells_after_count')
+
 
     # Apply uterotonics categorization
     data = categorize_uterotonics(data, 'uterotonics_column', 'uterotonics_received')
