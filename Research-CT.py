@@ -1078,6 +1078,60 @@ def process_length_of_stay(data, room_entry_col, room_exit_col, ref_col, result_
     data[result_col] = data.apply(compute_duration, axis=1)
     return data
 
+def process_length_of_fever(data, date_col, temp_col, step, num_batches, result_col):
+    """
+    Calculate the consecutive fever sequences (temperature above threshold).
+    """
+    def fever_sequences(row):
+        fever_dates = []
+        for i in range(num_batches):
+            date_idx = column_name_to_index(data, f"{date_col}_{i * step + 1}")
+            temp_idx = column_name_to_index(data, f"{temp_col}_{i * step + 1}")
+            if pd.notna(row.iloc[date_idx]) and pd.notna(row.iloc[temp_idx]) and row.iloc[temp_idx] >= 38:
+                fever_dates.append(pd.to_datetime(row.iloc[date_idx]).date())
+        
+        fever_dates = sorted(set(fever_dates))
+        if not fever_dates:
+            return ""
+        
+        sequences = []
+        current_streak = 1
+        for i in range(1, len(fever_dates)):
+            if (fever_dates[i] - fever_dates[i - 1]).days == 1:
+                current_streak += 1
+            else:
+                sequences.append(current_streak)
+                current_streak = 1
+        sequences.append(current_streak)
+        
+        return ", ".join(map(str, sorted(sequences, reverse=True)))
+    
+    data[result_col] = data.apply(fever_sequences, axis=1)
+    return data
+
+def process_other_cultures(data, collection_date_col, organism_col, specimen_col, step, num_batches, result_samples, result_organisms):
+    """
+    Extract unique sample types and detected organisms from multiple culture test columns.
+    """
+    def extract_culture_info(row):
+        samples = set()
+        organisms = set()
+        for i in range(num_batches):
+            date_idx = column_name_to_index(data, f"{collection_date_col}_{i * step + 1}")
+            organism_idx = column_name_to_index(data, f"{organism_col}_{i * step + 1}")
+            specimen_idx = column_name_to_index(data, f"{specimen_col}_{i * step + 1}")
+            
+            if pd.notna(row.iloc[date_idx]):
+                if pd.notna(row.iloc[specimen_idx]):
+                    samples.add(str(row.iloc[specimen_idx]))
+                if pd.notna(row.iloc[organism_idx]):
+                    organisms.add(str(row.iloc[organism_idx]))
+        
+        return pd.Series([', '.join(samples), ', '.join(organisms)])
+    
+    data[[result_samples, result_organisms]] = data.apply(extract_culture_info, axis=1)
+    return data
+
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -1538,6 +1592,15 @@ def main():
     # Apply length of stay processing
     data = process_length_of_stay(data, 'room_enter_date', 'room_exit_date', 'room_exit_hours_from_reference', 'length_of_stay_category')
 
+
+    # Apply fever sequence processing
+    data = process_length_of_fever(data, 'fever_date', 'fever_temp', step=1, num_batches=130, 
+                                       result_col='fever_sequences')
+
+    # Apply culture extraction processing
+    data = process_other_cultures(data, 'culture_date', 'culture_organism', 'culture_specimen', 
+                                      step=1, num_batches=10, result_samples='culture_samples_taken', 
+                                      result_organisms='culture_organisms_detected')
 
     # Remove specified columns, including single columns and ranges
     #data = remove_columns(data, [
