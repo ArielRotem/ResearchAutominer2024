@@ -1000,17 +1000,21 @@ def categorize_packed_cells(data, before_col, after_col, step, num_before_batche
     def process_row(row):
         count_before = 0
         count_after = 0
+        print(f"Here! NEW ROW")
+
         
         # Count occurrences of packed cells in "before" columns
         for i in range(num_before_batches):
             idx = before_idx + (i * step)
             if pd.notna(row.iloc[idx]):
+                print(f"Here!: before - {row.iloc[idx]}")
                 count_before += 1
         
         # Count occurrences of packed cells in "after" columns
         for i in range(num_after_batches):
             idx = after_idx + (i * step)
             if pd.notna(row.iloc[idx]):
+                print(f"Here!: after - {row.iloc[idx]}")
                 count_after += 1
         
         received = 1 if (count_before + count_after) > 0 else 0
@@ -1719,9 +1723,10 @@ def main():
                                result_col='fever_sequences')
 
     # Apply culture extraction processing.
-    #data = process_other_cultures(data, 'other cultures-collection date-days from reference', 'other cultures-organism detected', 'other cultures-specimen material', 
-                                    #  step=3, num_batches=10, result_samples='other_culture_samples_taken', 
-                                    #  result_organisms='other_culture_organisms_detected')
+    data = process_other_cultures(data, 'other cultures-collection date-days from reference', 'other cultures-organism detected', 'other cultures-specimen material', 
+                                      step=3, num_batches=10, result_samples='other_culture_samples_taken', 
+                                      result_organisms='other_culture_organisms_detected'
+                                      dictionary=organism_dict)
     #Organism category?? Ariel has to edit indexes.
 
     # Remove specified columns, including single columns and ranges
