@@ -1727,8 +1727,8 @@ def main():
     # Apply culture extraction processing.
     data = process_other_cultures(data, 'other cultures-collection date-days from reference', 'other cultures-organism detected', 'other cultures-specimen material', 
                                       step=3, num_batches=10, result_samples='other_culture_samples_taken', 
-                                      result_organisms='other_culture_organisms_detected'
-                                      dictionary=organism_dict)
+                                      result_organisms='other_culture_organisms_detected',
+                                      organism_translation_dict=organism_dict)
     #Organism category?? Ariel has to edit indexes.
 
     # Remove specified columns, including single columns and ranges
