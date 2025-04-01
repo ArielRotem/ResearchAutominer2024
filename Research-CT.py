@@ -1190,24 +1190,29 @@ def process_other_cultures(data, collection_date_col, organism_col, specimen_col
     """
     Extract unique sample types and detected organisms from multiple culture test columns.
     """
+    collection_idx = column_name_to_index(data, collection_date_col)
+    organism_idx = column_name_to_index(data, organism_col)
+    specimen_idx = column_name_to_index(data, specimen_col)
+
     def extract_culture_info(row):
         samples = set()
         organisms = set()
         for i in range(num_batches):
-            date_idx = column_name_to_index(data, f"{collection_date_col}_{i * step + 1}")
-            organism_idx = column_name_to_index(data, f"{organism_col}_{i * step + 1}")
-            specimen_idx = column_name_to_index(data, f"{specimen_col}_{i * step + 1}")
-            
-            if pd.notna(row.iloc[date_idx]):
-                if pd.notna(row.iloc[specimen_idx]):
-                    samples.add(str(row.iloc[specimen_idx]))
-                if pd.notna(row.iloc[organism_idx]):
-                    organisms.add(str(row.iloc[organism_idx]))
-        
+            date_i = collection_idx + (i * step)
+            org_i = organism_idx + (i * step)
+            spec_i = specimen_idx + (i * step)
+
+            if pd.notna(row.iloc[date_i]):
+                if pd.notna(row.iloc[spec_i]):
+                    samples.add(str(row.iloc[spec_i]))
+                if pd.notna(row.iloc[org_i]):
+                    organisms.add(str(row.iloc[org_i]))
+
         return pd.Series([', '.join(samples), ', '.join(organisms)])
-    
+
     data[[result_samples, result_organisms]] = data.apply(extract_culture_info, axis=1)
     return data
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
