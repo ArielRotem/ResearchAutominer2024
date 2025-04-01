@@ -1186,10 +1186,10 @@ def process_length_of_fever(data, date_col, temp_col, step, num_batches, result_
     return data
 
 
-def process_other_cultures(data, collection_date_col, organism_col, specimen_col, step, num_batches, result_samples, result_organisms, organism_translation_dict=None):
+def process_other_cultures(data, collection_date_col, organism_col, specimen_col, step, num_batches, result_samples, result_organisms, result_organism_categories=None, organism_translation_dict=None):
     """
     Extract unique sample types and detected organisms from multiple culture test columns.
-    If organism_translation_dict is provided, map organism names to standardized values.
+    If organism_translation_dict is provided, generate an additional column with mapped organism categories.
     """
     collection_idx = column_name_to_index(data, collection_date_col)
     organism_idx = column_name_to_index(data, organism_col)
@@ -1209,12 +1209,21 @@ def process_other_cultures(data, collection_date_col, organism_col, specimen_col
                 if pd.notna(row.iloc[org_i]) and str(row.iloc[org_i]).strip() != "":
                     organisms.add(str(row.iloc[org_i]))
 
-        if organism_translation_dict:
-            organisms = {organism_translation_dict.get(item.strip(), "Uncategorized") for item in organisms}
+        raw_organisms = ', '.join(organisms)
+        samples_str = ', '.join(samples)
 
-        return pd.Series([', '.join(samples), ', '.join(organisms)])
+        if organism_translation_dict and result_organism_categories:
+            categories = [organism_translation_dict.get(item.strip(), "") for item in organisms]
+            category_str = ', '.join(filter(None, categories))
+            return pd.Series([samples_str, raw_organisms, category_str])
+        else:
+            return pd.Series([samples_str, raw_organisms])
 
-    data[[result_samples, result_organisms]] = data.apply(extract_culture_info, axis=1)
+    if organism_translation_dict and result_organism_categories:
+        data[[result_samples, result_organisms, result_organism_categories]] = data.apply(extract_culture_info, axis=1)
+    else:
+        data[[result_samples, result_organisms]] = data.apply(extract_culture_info, axis=1)
+
     return data
 
 
@@ -1728,6 +1737,7 @@ def main():
     data = process_other_cultures(data, 'other cultures-collection date-days from reference_1', 'other cultures-organism detected_1', 'other cultures-specimen material_1', 
                                       step=3, num_batches=10, result_samples='other_culture_samples_taken', 
                                       result_organisms='other_culture_organisms_detected',
+                                      result_organism_categories='other_culture_categories_detected',
                                       organism_translation_dict=organism_dict)
     #Organism category?? Ariel has to edit indexes.
 
