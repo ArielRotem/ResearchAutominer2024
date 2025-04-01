@@ -1072,7 +1072,7 @@ def categorize_surgery_time(data, column, result_col):
     col_idx = column_name_to_index(data, column)
     
     def classify_time(row):
-        if pd.isna(row.iloc[col_idx]):
+        if pd.isna(row.iloc[col_idx]) or str(row.iloc[col_idx]).strip() == "":
             return ""  # Empty if no time
         
         try:
@@ -1725,7 +1725,7 @@ def main():
                                result_col='fever_sequences')
 
     # Apply culture extraction processing.
-    data = process_other_cultures(data, 'other cultures-collection date-days from reference', 'other cultures-organism detected', 'other cultures-specimen material', 
+    data = process_other_cultures(data, 'other cultures-collection date-days from reference_1', 'other cultures-organism detected_1', 'other cultures-specimen material_1', 
                                       step=3, num_batches=10, result_samples='other_culture_samples_taken', 
                                       result_organisms='other_culture_organisms_detected',
                                       organism_translation_dict=organism_dict)
