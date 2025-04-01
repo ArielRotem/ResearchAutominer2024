@@ -1053,22 +1053,28 @@ def categorize_uterotonics(data, base_col, step, num_batches, result_col, cytote
     return data
 
 def categorize_full_dilation(data, column, result_col):
-    """
-    Determine if full dilation (10 cm) was reached at surgery.
-    """
     col_idx = column_name_to_index(data, column)
-    data[result_col] = data.apply(lambda row: 1 if row.iloc[col_idx] == 10 else 0, axis=1)
+
+    def is_full_dilation(row):
+        value = row.iloc[col_idx]
+        if pd.isna(value):
+            return ""
+        try:
+            return 1 if float(value) == 10 else 0
+        except:
+            print(f"Error parsing '{value}' into a number for dilation")
+            return ""
+
+    data[result_col] = data.apply(is_full_dilation, axis=1)
     return data
 
 def categorize_surgery_time(data, column, result_col):
-    """
-    Categorize surgery times into Day, Evening, or Night.
-    """
     col_idx = column_name_to_index(data, column)
     
     def classify_time(row):
         if pd.isna(row.iloc[col_idx]):
-            return "Unknown"
+            return ""  # Empty if no time
+        
         try:
             hour = pd.to_datetime(row.iloc[col_idx]).hour
             if 7 <= hour < 16:
@@ -1078,10 +1084,11 @@ def categorize_surgery_time(data, column, result_col):
             else:
                 return "Night"
         except Exception:
-            return "Unknown"
+            return ""  # Empty on parse failure too
     
     data[result_col] = data.apply(classify_time, axis=1)
     return data
+
 
 def process_length_of_stay(data, room_col, entry_col, exit_col, step, num_batches, delivery_room_words, max_gap_minutes, result_col):
     """
