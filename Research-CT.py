@@ -996,30 +996,27 @@ def categorize_packed_cells(data, before_col, after_col, step, num_before_batche
     """
     before_idx = column_name_to_index(data, before_col)
     after_idx = column_name_to_index(data, after_col)
-    
+
     def process_row(row):
         count_before = 0
         count_after = 0
-        print(f"Here! NEW ROW")
+        #print(f"Here! NEW ROW")
 
-        
-        # Count occurrences of packed cells in "before" columns
         for i in range(num_before_batches):
             idx = before_idx + (i * step)
-            if pd.notna(row.iloc[idx]):
-                print(f"Here!: before - {row.iloc[idx]}")
+            if pd.notna(row.iloc[idx]) and str(row.iloc[idx]).strip() != "":
+                #print(f"Here!: before - {row.iloc[idx]}")
                 count_before += 1
-        
-        # Count occurrences of packed cells in "after" columns
+
         for i in range(num_after_batches):
             idx = after_idx + (i * step)
-            if pd.notna(row.iloc[idx]):
-                print(f"Here!: after - {row.iloc[idx]}")
+            if pd.notna(row.iloc[idx]) and str(row.iloc[idx]).strip() != "":
+                #print(f"Here!: after - {row.iloc[idx]}")
                 count_after += 1
-        
+
         received = 1 if (count_before + count_after) > 0 else 0
         return pd.Series([received, count_before, count_after])
-    
+
     data[[result_received, result_before, result_after]] = data.apply(process_row, axis=1)
     return data
 
@@ -1066,7 +1063,6 @@ def categorize_full_dilation(data, column, result_col):
         try:
             return 1 if float(value) == 10 else 0
         except:
-            print(f"Error parsing '{value}' into a number for dilation")
             return ""
 
     data[result_col] = data.apply(is_full_dilation, axis=1)
@@ -1207,10 +1203,10 @@ def process_other_cultures(data, collection_date_col, organism_col, specimen_col
             org_i = organism_idx + (i * step)
             spec_i = specimen_idx + (i * step)
 
-            if pd.notna(row.iloc[date_i]):
-                if pd.notna(row.iloc[spec_i]):
+            if pd.notna(row.iloc[date_i]) and str(row.iloc[date_i]).strip() != "":
+                if pd.notna(row.iloc[spec_i]) and str(row.iloc[spec_i]).strip() != "":
                     samples.add(str(row.iloc[spec_i]))
-                if pd.notna(row.iloc[org_i]):
+                if pd.notna(row.iloc[org_i]) and str(row.iloc[org_i]).strip() != "":
                     organisms.add(str(row.iloc[org_i]))
 
         if organism_translation_dict:
@@ -1220,6 +1216,7 @@ def process_other_cultures(data, collection_date_col, organism_col, specimen_col
 
     data[[result_samples, result_organisms]] = data.apply(extract_culture_info, axis=1)
     return data
+
 
 
 
