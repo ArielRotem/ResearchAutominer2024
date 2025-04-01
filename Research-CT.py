@@ -1020,27 +1020,36 @@ def categorize_packed_cells(data, before_col, after_col, step, num_before_batche
     return data
 
 
-def categorize_uterotonics(data, column, result_col):
+def categorize_uterotonics(data, base_col, step, num_batches, result_col, cytotec_words, methergin_words):
     """
-    Categorize whether a patient received uterotonics (Cytotec, Methergin, both, or none).
+    Categorize whether a patient received uterotonics based on multiple columns.
+    cytotec_words: List of words for Cytotec identification.
+    methergin_words: List of words for Methergin identification.
     """
-    col_idx = column_name_to_index(data, column)
-    
-    def classify_uterotonics(row):
-        if pd.isna(row.iloc[col_idx]):
-            return 0  # No uterotonics
-        value = str(row.iloc[col_idx]).lower()
-        cytotec = "ציטוטק" in value
-        methergin = "מטרגין" in value
-        if cytotec and methergin:
-            return 3  # Both
-        elif cytotec:
-            return 1  # Cytotec only
-        elif methergin:
-            return 2  # Methergin only
-        return 0
-    
-    data[result_col] = data.apply(classify_uterotonics, axis=1)
+    base_idx = column_name_to_index(data, base_col)
+   
+    def process_row(row):
+        cytotec_detected = False
+        methergin_detected = False
+       
+        for batch in range(num_batches):
+            idx = base_idx + (batch * step)
+            if pd.notna(row.iloc[idx]):
+                value_lower = str(row.iloc[idx]).lower()
+                if any(word.lower() in value_lower for word in cytotec_words):
+                    cytotec_detected = True
+                if any(word.lower() in value_lower for word in methergin_words):
+                    methergin_detected = True
+       
+        if cytotec_detected and methergin_detected:
+            return 3  # Both Cytotec and Methergin received
+        elif cytotec_detected:
+            return 1  # Only Cytotec received
+        elif methergin_detected:
+            return 2  # Only Methergin received
+        return 0  # No uterotonics received
+   
+    data[result_col] = data.apply(process_row, axis=1)
     return data
 
 def categorize_full_dilation(data, column, result_col):
@@ -1074,40 +1083,86 @@ def categorize_surgery_time(data, column, result_col):
     data[result_col] = data.apply(classify_time, axis=1)
     return data
 
-def process_length_of_stay(data, room_entry_col, room_exit_col, ref_col, result_col):
+def process_length_of_stay(data, room_col, entry_col, exit_col, step, num_batches, delivery_room_words, max_gap_minutes, result_col):
     """
-    Calculate and classify length of stay in the delivery room based on entry and exit times.
+    Calculate the total length of the most recent continuous stay in a delivery room.
+    delivery_room_words: List of words that identify a delivery room.
+    max_gap_minutes: Maximum allowed gap (in minutes) between consecutive stays for them to be considered the same sequence.
     """
-    entry_idx = column_name_to_index(data, room_entry_col)
-    exit_idx = column_name_to_index(data, room_exit_col)
-    ref_idx = column_name_to_index(data, ref_col)
-    
-    def compute_duration(row):
-        if pd.isna(row.iloc[entry_idx]) or pd.isna(row.iloc[exit_idx]):
-            return "Unknown"
-        duration = (pd.to_datetime(row.iloc[exit_idx]) - pd.to_datetime(row.iloc[entry_idx])).total_seconds() / 3600
-        ref_hours = row.iloc[ref_idx] if pd.notna(row.iloc[ref_idx]) else 0
-        return "Before Birth" if ref_hours < 0 else "After Birth"
-    
-    data[result_col] = data.apply(compute_duration, axis=1)
+    room_idx = column_name_to_index(data, room_col)
+    entry_idx = column_name_to_index(data, entry_col)
+    exit_idx = column_name_to_index(data, exit_col)
+   
+    def process_row(row):
+        stays = []
+       
+        for batch in range(num_batches):
+            idx_room = room_idx + (batch * step)
+            idx_entry = entry_idx + (batch * step)
+            idx_exit = exit_idx + (batch * step)
+           
+            if pd.notna(row.iloc[idx_room]) and any(word.lower() in str(row.iloc[idx_room]).lower() for word in delivery_room_words):
+                if pd.notna(row.iloc[idx_entry]) and pd.notna(row.iloc[idx_exit]):
+                    #print("entry:", row.iloc[idx_entry], row)
+                    entry_time = pd.to_datetime(row.iloc[idx_entry])
+                    #print("exit:", row.iloc[idx_exit])
+                    exit_time = pd.to_datetime(row.iloc[idx_exit])
+                    stays.append((entry_time, exit_time))
+       
+        # Merge continuous stays that are within max_gap_minutes apart
+        stays.sort(reverse=True, key=lambda x: x[0])  # Sort stays by entry time descending
+        merged_stay_time_minutes = 0.0
+       
+        if stays:
+            current_start, current_end = stays[0]
+            merged_stay_time_minutes += (current_end - current_start).total_seconds() / 60  # Keep in minutes
+           
+            for i in range(1, len(stays)):
+                next_start, next_end = stays[i]
+                if (current_start - next_end).total_seconds() / 60 <= max_gap_minutes:
+                    merged_stay_time_minutes += (next_end - next_start).total_seconds() / 60  # Keep in minutes
+                    current_start = next_start  # Extend the current sequence
+                else:
+                    break  # Stop merging if gap is too large
+       
+        return round(merged_stay_time_minutes / 60, 2) if merged_stay_time_minutes > 0 else None  # Convert to hours for return
+   
+    data[result_col] = data.apply(process_row, axis=1)
     return data
 
 def process_length_of_fever(data, date_col, temp_col, step, num_batches, result_col):
     """
     Calculate the consecutive fever sequences (temperature above threshold).
     """
+    date_idx = column_name_to_index(data, date_col)
+    temp_idx = column_name_to_index(data, temp_col)
+
+    def safe_float(val):
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
     def fever_sequences(row):
         fever_dates = []
+
         for i in range(num_batches):
-            date_idx = column_name_to_index(data, f"{date_col}_{i * step + 1}")
-            temp_idx = column_name_to_index(data, f"{temp_col}_{i * step + 1}")
-            if pd.notna(row.iloc[date_idx]) and pd.notna(row.iloc[temp_idx]) and row.iloc[temp_idx] >= 38:
-                fever_dates.append(pd.to_datetime(row.iloc[date_idx]).date())
-        
+            idx_date = date_idx + (i * step)
+            idx_temp = temp_idx + (i * step)
+
+            temp_val = safe_float(row.iloc[idx_temp])
+            date_val = row.iloc[idx_date]
+
+            if pd.notna(date_val) and temp_val is not None and temp_val >= 38:
+                try:
+                    fever_dates.append(pd.to_datetime(date_val).date())
+                except Exception:
+                    pass  # skip invalid dates
+
         fever_dates = sorted(set(fever_dates))
         if not fever_dates:
             return ""
-        
+
         sequences = []
         current_streak = 1
         for i in range(1, len(fever_dates)):
@@ -1117,11 +1172,12 @@ def process_length_of_fever(data, date_col, temp_col, step, num_batches, result_
                 sequences.append(current_streak)
                 current_streak = 1
         sequences.append(current_streak)
-        
+
         return ", ".join(map(str, sorted(sequences, reverse=True)))
-    
+
     data[result_col] = data.apply(fever_sequences, axis=1)
     return data
+
 
 def process_other_cultures(data, collection_date_col, organism_col, specimen_col, step, num_batches, result_samples, result_organisms):
     """
@@ -1400,7 +1456,8 @@ def main():
         "2": ["ניסיון היפוך", "השראת לידה - פקיעת מים", "השראת לידה", "PG", "הבשלת צוואר", "אוגמנטציה - פיטוצין", "אוגמנטציה"],
         "3": ["הבשלת צואר - בלון"],
         "4": ["ניתוח קיסרי"],
-        "5": ["אינה בלידה","אחר"]
+        "5": ["אינה בלידה","אחר"],
+        "6": ["Misoprostol", "Termination of pregnancy"]
     }
     update_column_with_values(data, 'type of labor onset', words_dict_0, default_value="Other")
 
@@ -1410,6 +1467,13 @@ def main():
         "1": ["כן"]
     }
     update_column_with_values(data, 'complications-value textual', words_dict_1, default_value="Other")
+    
+    #*עמודה - בשם amniofusion-non-numeric results
+    words_dict_2 = {
+        "1": ["בוצע", "בוצע עי דר הראל"]
+    }
+    update_column_with_values(data, 'complications-value textual', words_dict_2, default_value="Other", empty_value="0")
+
     
     #*עמודה - בשם amniotic fluid color
     words_dict_5 = {
@@ -1471,12 +1535,22 @@ def main():
         "2": ["Non Reassuring Fetal Monitor"],
         "3": ["Arrest of dilatation","Dysfunctional Labour","Failed Induction","Failure of descent", "No progress", "Susp. CPD","Failed Vacuum Extraction","Failed Forceps extraction"],
         "4": ["MATERNAL REQUEST","Maternal Exhaustion"],
-        "5": ["Prev. C.S. - Patient`s Request","Previous Uterine Scar"],
+        "5": ["Prev. C.S. - Patient`s Request","Previous Uterine Scar", "S/P Myomectomy"],
         "6": ["Macrosomia"],
-        "7": ["Fetal Thrombocytopenia","Marginal placenta","Multiple Pregnancy", "Other Indication", "Past Shoulder Dystocia", "Placenta Accreta", "Placenta previa", "Prolapse of Cord", "S/P Tear III/IV degree","Susp. Uterine Rupture", "Suspected Placental Abruption", "Suspected Vasa Previa", "TWINS PREGNANCY"]
+        "7": ["Fetal Thrombocytopenia","Marginal placenta","Multiple Pregnancy", "Other Indication", "Past Shoulder Dystocia", "Placenta Accreta", "Placenta previa", "Prolapse of Cord", "S/P Tear III/IV degree","Susp. Uterine Rupture", "Suspected Placental Abruption", "Suspected Vasa Previa", "TWINS PREGNANCY", "Genital Herpes", "Tumor Previa", "Triplet pregnancy"]
         
     }
     update_column_with_values(data, 'cs info-main indication', words_dict_11, default_value="Other")
+    
+    #עמודה בשם cs info-type of surgery
+    words_dict_12 = {
+        "1": ["אלקטיבי"],
+        "2": ["סמי-אלקטיבי"],
+        "3": ["דחוף"],
+        "4": ["בהול"]
+        
+    }
+    update_column_with_values(data, 'cs info-type of surgery', words_dict_12, default_value="Other", empty_value="")
     
      #*עמודות YN,YR,YV,YZ - בשם Procedure
      #0-No or Hysterectomy, 1-Laparotomy, 2-Laparoscoy, 3-Other
@@ -1494,7 +1568,7 @@ def main():
     words_dict_14 = {
         "1": ["FIBRILLAR"],
         "2": ["NU_KNIT"],
-        "3": ["DERAIL_2","DiagnosisTest","Hemostasis","LyingDown","Text_1"]
+        "3": ["DETAIL_2","DiagnosisTest","Hemostasis","LyingDown","Text_1", "Sergiplo"]
     }
     update_column_with_values(data, 'hemostasis-code', words_dict_14, default_value="Other", empty_value="0")
     
@@ -1518,7 +1592,7 @@ def main():
     data = filter_numbers(data, 'bmi-numeric result', lowerThan=15, higherThan=61)
     
     # Filter numbers in coulmn 'hospital length of stay (days)', removing values above 100
-    data = filter_numbers(data, 'hospital length of stay (days)', lowerThan=0, higherThan=100)
+    #data = filter_numbers(data, 'hospital length of stay (days)', lowerThan=0, higherThan=100)
 
     # Flip the sign of numeric values in column 'AV' and remove values over 2500
     data = flip_sign(data, 'rom description-date of membranes rupture-hours from reference')
@@ -1591,34 +1665,52 @@ def main():
         new_column_name="Filtered_Keys"
     )
 
-    data = categorize_packed_cells(data, 'packed_cells_before_1', 'packed_cells_after_1', step=2, 
+    data = categorize_packed_cells(data, 'packed cells before-date administered-days from reference_1', 'packed cells after-date administered-days from reference_1', step=2, 
                                num_before_batches=5, num_after_batches=3, 
-                               result_received='packed_cells_received', 
+                               result_received='packed_cells_received_yes_or_no', 
                                result_before='packed_cells_before_count', 
                                result_after='packed_cells_after_count')
 
 
     # Apply uterotonics categorization
-    data = categorize_uterotonics(data, 'uterotonics_column', 'uterotonics_received')
+    cytotec_words = ["ציטוטק", "cytotec"]
+    methergin_words = ["מטרגין", "methergin"]
+
+    data = categorize_uterotonics(data, 'uterotonics-medication_1', step=2, num_batches=2,
+                              result_col='uterotonics_received',
+                              cytotec_words=cytotec_words,
+                              methergin_words=methergin_words)
 
     # Apply full dilation check
-    data = categorize_full_dilation(data, 'dilation_column', 'full_dilation_at_surgery')
+    data = categorize_full_dilation(data, 'full dilation at surgery-value numeric', 'full_dilation_at_surgery_yes_or_no')
 
     # Apply surgery time categorization
-    data = categorize_surgery_time(data, 'surgery_start_time', 'surgery_time_category')
+    data = categorize_surgery_time(data, 'surgery time-surgery start date time', 'surgery_time_category')
 
     # Apply length of stay processing
-    data = process_length_of_stay(data, 'room_enter_date', 'room_exit_date', 'room_exit_hours_from_reference', 'length_of_stay_category')
-
+    data = process_length_of_stay(data,
+                              room_col='length of stay delivery room-department_1',
+                              entry_col='length of stay delivery room-room enter date_1',
+                              exit_col='length of stay delivery room-room exit date_1',
+                              step=5,
+                              num_batches=5,
+                              delivery_room_words=["חדר לידה"],
+                              max_gap_minutes=20,
+                              result_col='delivery_room_stay_hours')
 
     # Apply fever sequence processing
-    data = process_length_of_fever(data, 'fever_date', 'fever_temp', step=1, num_batches=130, 
-                                       result_col='fever_sequences')
+    data = process_length_of_fever(data,
+                               date_col='count of fever over 38-date of measurement_1',
+                               temp_col='count of fever over 38-numeric result_1',
+                               step=3,
+                               num_batches=130,
+                               result_col='fever_sequences')
 
-    # Apply culture extraction processing
-    data = process_other_cultures(data, 'culture_date', 'culture_organism', 'culture_specimen', 
-                                      step=1, num_batches=10, result_samples='culture_samples_taken', 
-                                      result_organisms='culture_organisms_detected')
+    # Apply culture extraction processing.
+    #data = process_other_cultures(data, 'other cultures-collection date-days from reference', 'other cultures-organism detected', 'other cultures-specimen material', 
+                                    #  step=3, num_batches=10, result_samples='other_culture_samples_taken', 
+                                    #  result_organisms='other_culture_organisms_detected')
+    #Organism category?? Ariel has to edit indexes.
 
     # Remove specified columns, including single columns and ranges
     #data = remove_columns(data, [
@@ -1657,27 +1749,28 @@ def main():
     #    'obstetric formula-number of pregnancies (g)',
     #    'surgery before delivery-procedure_1',
     #    'surgery after delivery-procedure_1',
-    #    'maternal pregestaional diabetes-diagnosis',	
-    #    'maternal gestational diabetes-diagnosis',	
-    #    'maternal pregestational hypertension-diagnosis',	
-    #    'maternal gestational hypertension-diagnosis',	
-    #    'maternal hellp syndrome-diagnosis',	
+    #    'maternal pregestaional diabetes-diagnosis',   
+    #    'maternal gestational diabetes-diagnosis', 
+    #    'maternal pregestational hypertension-diagnosis',  
+    #    'maternal gestational hypertension-diagnosis', 
+    #    'maternal hellp syndrome-diagnosis',   
     #    'maternal pph-diagnosis',
     #    'blood products given-medication',
     #    'penicillin clindamycin prophylaxis-date administered-hours from reference',
-    #    'penicillin clindamycin prophylaxis-date administered',	
-    #    'penicillin clindamycin prophylaxis-medication',	
-    #    'ampicillin prophylaxis-date administered-hours from reference',	
-    #    'ampicillin prophylaxis-date administered',	
+    #    'penicillin clindamycin prophylaxis-date administered',    
+    #    'penicillin clindamycin prophylaxis-medication',   
+    #    'ampicillin prophylaxis-date administered-hours from reference',   
+    #    'ampicillin prophylaxis-date administered',    
     #    'ampicillin prophylaxis-medication',
-    #    'penicillin/clindamycin timing calculated',	
+    #    'penicillin/clindamycin timing calculated',    
     #    'ampicillin timing calculated',
     #    'blood_culture_taken'
     #    ])
 
 
     ##save_data(data, output_filepath)
-    split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
+    #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
+    save_data (data, 'output.csv')
 
 if __name__ == "__main__":
     main()
