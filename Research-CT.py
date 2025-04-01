@@ -1190,9 +1190,10 @@ def process_length_of_fever(data, date_col, temp_col, step, num_batches, result_
     return data
 
 
-def process_other_cultures(data, collection_date_col, organism_col, specimen_col, step, num_batches, result_samples, result_organisms):
+def process_other_cultures(data, collection_date_col, organism_col, specimen_col, step, num_batches, result_samples, result_organisms, organism_translation_dict=None):
     """
     Extract unique sample types and detected organisms from multiple culture test columns.
+    If organism_translation_dict is provided, map organism names to standardized values.
     """
     collection_idx = column_name_to_index(data, collection_date_col)
     organism_idx = column_name_to_index(data, organism_col)
@@ -1212,10 +1213,14 @@ def process_other_cultures(data, collection_date_col, organism_col, specimen_col
                 if pd.notna(row.iloc[org_i]):
                     organisms.add(str(row.iloc[org_i]))
 
+        if organism_translation_dict:
+            organisms = {organism_translation_dict.get(item.strip(), "Uncategorized") for item in organisms}
+
         return pd.Series([', '.join(samples), ', '.join(organisms)])
 
     data[[result_samples, result_organisms]] = data.apply(extract_culture_info, axis=1)
     return data
+
 
 
 organism_dict = {
