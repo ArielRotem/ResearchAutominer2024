@@ -1227,6 +1227,36 @@ def process_other_cultures(data, collection_date_col, organism_col, specimen_col
     return data
 
 
+def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, num_steps, keywords, result_col_name):
+    """
+    Flags rows where imaging-guided drainage was performed based on:
+    - A single static column being non-empty
+    - OR any of the repeated columns (based on step) containing specific keywords
+    """
+    static_idx = column_name_to_index(data, static_col)
+    repeated_idx = column_name_to_index(data, repeated_col)
+    keywords_lower = [kw.lower() for kw in keywords]
+
+    def check_row(row):
+        # Check static column for non-empty
+        if pd.notna(row.iloc[static_idx]) and str(row.iloc[static_idx]).strip() != "":
+            return 1
+
+        # Check repeated columns for keyword match
+        for i in range(num_steps):
+            idx = repeated_idx + i * step_size
+            if idx >= len(row):
+                continue
+            val = str(row.iloc[idx]).lower()
+            if any(kw in val for kw in keywords_lower):
+                return 1
+
+        # If nothing matched
+        return 0
+
+    data[result_col_name] = data.apply(check_row, axis=1)
+    return data
+
 
 
 organism_dict = {
@@ -1779,7 +1809,16 @@ def main():
                                       result_organisms='other_culture_organisms_detected',
                                       result_organism_categories='other_culture_categories_detected',
                                       organism_translation_dict=organism_dict)
-    #Organism category?? Ariel has to edit indexes.
+
+    data = imaging_guided_drainage_detected(data,
+                                                static_col="imaging_ first cti/usi-performed procedures",
+                                                repeated_col="imaging_ct/cti (first 10)-performed procedures",
+                                                step_size=4,
+                                                num_steps=6,
+                                                keywords=["CTI", "USI", "ניקוז"],
+                                                result_col_name="Imaging_Guided_Drainage"
+    )
+
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
