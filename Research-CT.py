@@ -1,5 +1,7 @@
 import pandas as pd
 from collections import defaultdict
+import re
+
 
 # Custom sort function
 def custom_sort(item):
@@ -1258,6 +1260,34 @@ def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, 
     return data
 
 
+def flag_infectious_indication_from_free_text(data, column_name, infectious_words, negation_prefixes, result_col, snippet_col, context_window=5):
+    col_idx = column_name_to_index(data, column_name)
+    infectious_words_lower = [w.lower() for w in infectious_words]
+    negation_prefixes_lower = [p.lower() for p in negation_prefixes]
+
+    def extract_match_snippet(text):
+        text_lower = str(text).lower()
+        words = text_lower.split()
+        for i, word in enumerate(words):
+            for infectious_word in infectious_words_lower:
+                if infectious_word in word:
+                    # Check for negation in prefix
+                    prefix_slice = words[max(i - 3, 0):i]  # Up to 3 words before
+                    joined_prefix = ' '.join(prefix_slice)
+                    if any(neg in joined_prefix for neg in negation_prefixes_lower):
+                        continue  # skip match if prefixed by negation
+
+                    # Found a match
+                    snippet_start = max(i - context_window, 0)
+                    snippet = ' '.join(words[snippet_start:i + 1])
+                    return (1, snippet)
+        return (0, "")
+
+    results = data.iloc[:, col_idx].apply(extract_match_snippet)
+    data[result_col] = results.apply(lambda x: x[0])
+    data[snippet_col] = results.apply(lambda x: x[1])
+    return data
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -1707,7 +1737,7 @@ def main():
     data = is_empty(data, 'maternal gestational diabetes-maternal gestational diabetes-diagnosis', 'maternal_gestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis', 'maternal_pregestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal gestational hypertension-maternal gestational hypertension-diagnosis', 'maternal_gestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'maternal hellp syndrome-diagnosis', 'maternal_hellp_syndrome_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'maternal hellp syndrome-diagnosis', 'maternal_hellp_syndrome_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal pph-diagnosis', 'maternal_pph_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'blood products given-medication', 'blood_products_given_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal vte_after delivery-diagnosis', 'maternal vte_after_delivery_yes_or_no', value_empty=0, value_not_empty=1)
@@ -1735,7 +1765,7 @@ def main():
     #data = filtered_labor_data
     
     #data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=6 ,num_tuples=206, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
-    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=6 ,num_tuples=206, output_file="heatmap.csv")r
+    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=6 ,num_tuples=206, output_file="heatmap.csv")
 
     data = concat_values_across_batches(data, "antibiotics-medication_1", 3, 108, "concat_antibiotics_given" )  # antibiotics-medication_1 3 X 108
     #result_df = generate_patient_specific_dataset(
@@ -1819,37 +1849,45 @@ def main():
                                                 result_col_name="Imaging_Guided_Drainage"
     )
 
+    data = flag_infectious_indication_from_free_text(data,
+                            column_name="has imaging (first ct/cti)-interpretation",
+                            infectious_words=["חום", "חומים", "דלקת", "אבצס", "קולקציה", "OVT", "abscess", "fever", "inflammation", "collection"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
+                            result_col="Imaging_Infectious_Reason",
+                            snippet_col="Infectious_Reason_Snippet"
+    )
+
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
-        'reference occurrence number',
-        'date of birth~date of death - days from delivery',
-        'date of first documentation - birth occurence~imaging_ first cti/usi-interpretation',
-        'amniofusion-date of measurement-days from reference',
-        'cs info-date of documentation~cs info-remarks',
-        'scrub-value textual~surgery reports-documenting date',
-        'surgery reports-complications during surgery',
-        'full dilation at surgery-value numeric~surgery info-date of procedure',
-        'hospitalization before delivery (hrp) - admission date~length of stay delivery room-room exit - hours from reference_5',
-        'transfer to icu-department admission date~transfer to icu-department discharge date',
-        'readmission-hospital admission date',
-        'readmission-hospital discharge date',
-        'second stage timeline-time of full dilation',
-        'fever_max 38-43 before delivery-date of measurement',
-        'count of fever over 38-date of measurement_1~count of fever over 38-department_130',
-        'fever_max 38-43 after delivery-date of measurement',
-        'pprom diagnosis-date of documentation',
-        'pprom diagnosis-diagnosis',
-        'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal infection post partum-diagnosis',
-        'blood cultures-organism detected_1~organisms susceptability-susceptibility value_206',
-        'antibiotics-date administered-days from reference_1~antibiotics-medication_108',
-        'gbs status-gbs in urine~gbs status-gbs vagina',
+    #    'reference occurrence number',
+    #    'date of birth~date of death - days from delivery',
+    #    'date of first documentation - birth occurence~imaging_ first cti/usi-interpretation',
+    #    'amniofusion-date of measurement-days from reference',
+    #    'cs info-date of documentation~cs info-remarks',
+    #    'scrub-value textual~surgery reports-documenting date',
+    #    'surgery reports-complications during surgery',
+    #    'full dilation at surgery-value numeric~surgery info-date of procedure',
+    #    'hospitalization before delivery (hrp) - admission date~length of stay delivery room-room exit - hours from reference_5',
+    #    'transfer to icu-department admission date~transfer to icu-department discharge date',
+    #    'readmission-hospital admission date',
+    #    'readmission-hospital discharge date',
+    #    'second stage timeline-time of full dilation',
+    #    'fever_max 38-43 before delivery-date of measurement',
+    #    'count of fever over 38-date of measurement_1~count of fever over 38-department_130',
+    #    'fever_max 38-43 after delivery-date of measurement',
+    #    'pprom diagnosis-date of documentation',
+    #    'pprom diagnosis-diagnosis',
+    #    'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal infection post partum-diagnosis',
+    #    'blood cultures-organism detected_1~organisms susceptability-susceptibility value_206',
+    #    'antibiotics-date administered-days from reference_1~antibiotics-medication_108',
+    #    'gbs status-gbs in urine~gbs status-gbs vagina',
   
     #    'wbc max-collection date-hours from reference',
     #    'crp max-collection date-hours from reference',
     #    'surgery after delivery-department_1~surgery after delivery-department_2',
     #    'imaging-exam performed (sps)_1~imaging-performed procedures_7'
-    #    ])
+         ])
 
     save_data (data, 'output.csv')
 
