@@ -1739,7 +1739,7 @@ def main():
     data = is_empty(data, 'maternal gestational hypertension-maternal gestational hypertension-diagnosis', 'maternal_gestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
     #data = is_empty(data, 'maternal hellp syndrome-diagnosis', 'maternal_hellp_syndrome_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal pph-diagnosis', 'maternal_pph_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'blood products given-medication', 'blood_products_given_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'blood products given-medication', 'blood_products_given_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal vte_after delivery-diagnosis', 'maternal vte_after_delivery_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal vte_before delivery-diagnosis', 'maternal vte_before_delivery_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal infection post partum-diagnosis', 'maternal_infection_post_partum_yes_or_no', value_empty=0, value_not_empty=1)
@@ -1842,7 +1842,7 @@ def main():
 
     data = imaging_guided_drainage_detected(data,
                                                 static_col="imaging_ first cti/usi-performed procedures",
-                                                repeated_col="imaging_ct/cti (first 10)-performed procedures",
+                                                repeated_col="imaging_ct/cti (first 10)-performed procedures_1",
                                                 step_size=4,
                                                 num_steps=6,
                                                 keywords=["CTI", "USI", "ניקוז"],
@@ -1851,7 +1851,7 @@ def main():
 
     data = flag_infectious_indication_from_free_text(data,
                             column_name="has imaging (first ct/cti)-interpretation",
-                            infectious_words=["חום", "חומים", "דלקת", "אבצס", "קולקציה", "OVT", "abscess", "fever", "inflammation", "collection"],
+                            infectious_words=["חום", "חומים", "דלקת", "אבצס", "קולקציה", "OVT", "abscess", "fever", "inflammation", "collection", "מזוהמת", "זיהום"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
                             result_col="Imaging_Infectious_Reason",
                             snippet_col="Infectious_Reason_Snippet"
