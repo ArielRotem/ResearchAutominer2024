@@ -1501,6 +1501,28 @@ def main():
     }
     update_column_with_values(data, 'complications-value textual', words_dict_2, default_value="Other", empty_value="0")
 
+     #*עמודה - בשם surgery reports-surgery date-weekday
+    words_dict_3 = {
+        "1": ["Sunday"],
+        "2": ["Monday"],
+        "3": ["Tuesday"],
+        "4": ["Wednesday"],
+        "5": ["Thursay"],
+        "6": ["Friday"],
+        "7": ["Saturday"]
+    }
+    update_column_with_values(data, 'surgery reports-surgery date-weekday', words_dict_3, default_value="Other", empty_value="")
+    
+      #*עמודה - בשם surgery info-procedure
+    words_dict_4 = {
+        "1": ["LSCS","LOW SEGMENT CESAREAN SECTION","CESAREAN DELIVERY L.S.C.S"],
+        "2": ["HIGH TRANSVERSE CESAREAN SECTION"],
+        "3": ["CESAREAN HYSTERECTOMY", "CESAREAN DELIVERY AND HYSTERECTOMY"],
+        "4": ["CLASSICAL"],
+        "5": ["INVERTED T INCISION "]
+    }
+    
+    update_column_with_values(data, 'surgery info-procedure', words_dict_4, default_value="Other", empty_value="")
     
     #*עמודה - בשם amniotic fluid color
     words_dict_5 = {
@@ -1543,7 +1565,7 @@ def main():
 
     #*עמודה - בשם readmission department
     words_dict_9 = {
-        "1": ["גינקולוגיה", "יולדות מוא", "יולדות ב"],
+        "1": ["גינקולוגיה", "יולדות א", "יולדות ב"],
         "2": ["א.א.ג ניתוחי ראש וצוואר", "אורולוגיה", "השהיה מלרד", "כירורגית ב", "כירורגית ג", "מלונית", "נוירולוגיה", "פנימית ו", "פנימית ט", "אונקולוגית", "פנימית א", "פנימית ד", "פנימית ג", "שרות שיקום מרחוק תנועה"],
     }
     #update_column_with_values(data, 'readmission-admitting department', words_dict_9, default_value="Other", empty_value="0")
@@ -1568,6 +1590,7 @@ def main():
         
     }
     update_column_with_values(data, 'cs info-main indication', words_dict_11, default_value="Other")
+    update_column_with_values(data, 'cs info-secondary indication', words_dict_11, default_value="Other")
     
     #עמודה בשם cs info-type of surgery
     words_dict_12 = {
@@ -1598,6 +1621,20 @@ def main():
         "3": ["DETAIL_2","DiagnosisTest","Hemostasis","LyingDown","Text_1", "Sergiplo"]
     }
     update_column_with_values(data, 'hemostasis-code', words_dict_14, default_value="Other", empty_value="0")
+    
+    #אוגמנטציה
+    words_dict_15 = {
+        "1": ["MISOPROSTOL"],
+        "2": ["OXYTOCIN"]
+    }
+    update_column_with_values(data, 'augmentation meds-medication', words_dict_15, default_value="Other", empty_value="0")
+    
+    #בלון/פרופס
+    words_dict_16 = {
+        "1": ["הכנסת בלון"],
+        "2": ["הכנסת פרופס"]
+    }
+    update_column_with_values(data, 'balloon/propes-measurement', words_dict_16, default_value="Other", empty_value="0")
     
     ## Remove negative values from 
     #cleared = clear_negative_values(data, '')
@@ -1636,16 +1673,19 @@ def main():
 
     
     # Check if the cell value in maternal diagnosis column is empty or not, and returns 1 if its not, 0 if it is.
-    #data = is_empty(data, 'maternal pregestaional diabetes-diagnosis', 'maternal_pregestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'maternal gestational diabetes-diagnosis', 'maternal_gestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'maternal pregestational hypertension-diagnosis', 'maternal_pregestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'maternal gestational hypertension-diagnosis', 'maternal_gestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'maternal hellp syndrome-diagnosis', 'maternal_hellp_syndrome_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'maternal pph-diagnosis', 'maternal_pph_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'blood products given-medication', 'blood_products_given_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'maternal vte_after delivery-diagnosis', 'maternal vte_after_delivery_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'maternal vte_before delivery-diagnosis', 'maternal vte_before_delivery_yes_or_no', value_empty=0, value_not_empty=1)
-    #data = is_empty(data, 'maternal infection post partum-diagnosis', 'maternal_infection_post_partum_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal pregestaional diabetes-maternal pregestaional diabetes-diagnosis', 'maternal_pregestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal gestational diabetes-maternal gestational diabetes-diagnosis', 'maternal_gestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis', 'maternal_pregestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal gestational hypertension-maternal gestational hypertension-diagnosis', 'maternal_gestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal hellp syndrome-diagnosis', 'maternal_hellp_syndrome_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal pph-diagnosis', 'maternal_pph_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'blood products given-medication', 'blood_products_given_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal vte_after delivery-diagnosis', 'maternal vte_after_delivery_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal vte_before delivery-diagnosis', 'maternal vte_before_delivery_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'maternal infection post partum-diagnosis', 'maternal_infection_post_partum_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'hospitalization before delivery (hrp) - admission date', 'HRP_hospitalization_prepartum_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'pprom diagnosis-date of documentation', 'PPROM_yes_or_no', value_empty=0, value_not_empty=1)
+    
   
     # Check if numeric values in column 'AV' meet or exceed the cutoff of __, and add results in a new column '___'
     data = cutoff_number(data, 'rom description-date of membranes rupture-hours from reference', 'duration_of_rom_over_18h', 18, above=1, below=0, empty_value='')
@@ -1665,7 +1705,7 @@ def main():
     #data = filtered_labor_data
     
     #data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=6 ,num_tuples=206, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
-    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=6 ,num_tuples=206, output_file="heatmap.csv")
+    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=6 ,num_tuples=206, output_file="heatmap.csv")r
 
     data = concat_values_across_batches(data, "antibiotics-medication_1", 3, 108, "concat_antibiotics_given" )  # antibiotics-medication_1 3 X 108
     #result_df = generate_patient_specific_dataset(
@@ -1688,7 +1728,7 @@ def main():
     data = extract_and_filter_raw_map(
         data=data,
         input_column="scrub-all row data",
-        substrings=["General", "Alcohol", "Chlorhexidine"],
+        substrings=["רחצה-", "חיטוי-", "Polydine"],
         new_column_name="Filtered_Keys"
     )
 
@@ -1712,7 +1752,7 @@ def main():
     data = categorize_full_dilation(data, 'full dilation at surgery-value numeric', 'full_dilation_at_surgery_yes_or_no')
 
     # Apply surgery time categorization
-    data = categorize_surgery_time(data, 'surgery time-surgery start date time', 'surgery_time_category')
+    data = categorize_surgery_time(data, 'surgery time-documenting date', 'surgery_time_category')
 
     # Apply length of stay processing
     data = process_length_of_stay(data,
@@ -1742,63 +1782,36 @@ def main():
     #Organism category?? Ariel has to edit indexes.
 
     # Remove specified columns, including single columns and ranges
-    #data = remove_columns(data, [
-    #    'reference occurrence number',
-    #    'date of birth~date of death - days from delivery',
-    #    'date of first documentation - birth occurence',
-    #    'hospital admission date',
-    #    'hospital discharge date',
-    #    
-    #    
-    #    
-    #    'second and third stage timeline-time of full dilation',
-    #    'gbs status-gbs in urine','gbs status-gbs vagina',
-    #    'fever temperature numeric_max 37.5-43-date of measurement',
-    #    'onset of fever 38 until delivery-date of measurement-hours from reference',
-    #    'onset of fever 38 until delivery-date of measurement',
+    data = remove_columns(data, [
+        'reference occurrence number',
+        'date of birth~date of death - days from delivery',
+        'date of first documentation - birth occurence~imaging_ first cti/usi-interpretation',
+        'amniofusion-date of measurement-days from reference',
+        'cs info-date of documentation~cs info-remarks',
+        'scrub-value textual~surgery reports-documenting date',
+        'surgery reports-complications during surgery',
+        'full dilation at surgery-value numeric~surgery info-date of procedure',
+        'hospitalization before delivery (hrp) - admission date~length of stay delivery room-room exit - hours from reference_5',
+        'transfer to icu-department admission date~transfer to icu-department discharge date',
+        'readmission-hospital admission date',
+        'readmission-hospital discharge date',
+        'second stage timeline-time of full dilation',
+        'fever_max 38-43 before delivery-date of measurement',
+        'count of fever over 38-date of measurement_1~count of fever over 38-department_130',
+        'fever_max 38-43 after delivery-date of measurement',
+        'pprom diagnosis-date of documentation',
+        'pprom diagnosis-diagnosis',
+        'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal infection post partum-diagnosis',
+        'blood cultures-organism detected_1~organisms susceptability-susceptibility value_206',
+        'antibiotics-date administered-days from reference_1~antibiotics-medication_108',
+        'gbs status-gbs in urine~gbs status-gbs vagina',
+  
     #    'wbc max-collection date-hours from reference',
     #    'crp max-collection date-hours from reference',
-    #    'transfers-department admission date-days from reference',
-    #    'transfers-department discharge date-days from reference',
-    #    'readmission-hospital admission date-days from reference',
-    #    'readmission-hospital admission date',
-    #    'readmission-hospital discharge date-days from reference',
-    #    'readmission-hospital discharge date',
-    #    'cultures-test type_1~cultures-stain_61',
-    #    'surgery before delivery-date of procedure-days from reference_1~surgery before delivery-date of procedure copy_1',
-    #    'surgery before delivery-department_1~surgery after delivery-date of procedure copy_1',
     #    'surgery after delivery-department_1~surgery after delivery-department_2',
-    #    'imaging-exam performed (sps)_1~imaging-performed procedures_7',
-    #    'antibiotics-date administered-hours from reference_1~antibiotics-medication_108',
-    #    'surgery indication-type of surgery',
-    #    'obstetric formula-number of abortions (ab)',
-    #    'obstetric formula-number of births (p)',
-    #    'obstetric formula-number of ectopic pregnancies (eup)',
-    #    'obstetric formula-number of live children (lc)',
-    #    'obstetric formula-number of pregnancies (g)',
-    #    'surgery before delivery-procedure_1',
-    #    'surgery after delivery-procedure_1',
-    #    'maternal pregestaional diabetes-diagnosis',   
-    #    'maternal gestational diabetes-diagnosis', 
-    #    'maternal pregestational hypertension-diagnosis',  
-    #    'maternal gestational hypertension-diagnosis', 
-    #    'maternal hellp syndrome-diagnosis',   
-    #    'maternal pph-diagnosis',
-    #    'blood products given-medication',
-    #    'penicillin clindamycin prophylaxis-date administered-hours from reference',
-    #    'penicillin clindamycin prophylaxis-date administered',    
-    #    'penicillin clindamycin prophylaxis-medication',   
-    #    'ampicillin prophylaxis-date administered-hours from reference',   
-    #    'ampicillin prophylaxis-date administered',    
-    #    'ampicillin prophylaxis-medication',
-    #    'penicillin/clindamycin timing calculated',    
-    #    'ampicillin timing calculated',
-    #    'blood_culture_taken'
+    #    'imaging-exam performed (sps)_1~imaging-performed procedures_7'
     #    ])
 
-
-    ##save_data(data, output_filepath)
-    #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
     save_data (data, 'output.csv')
 
 if __name__ == "__main__":
