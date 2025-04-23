@@ -1922,7 +1922,7 @@ def main():
     )
 
     data_singled = split_rows_by_non_empty_batches(data,
-                                                batch_start_col="imaging_ct/cti (first 10)-performed procedures_1",
+                                                batch_start_col="imaging_ct/cti (first 10)-exam start time-days from reference_1",
                                                 step_size=4,
                                                 num_batches=6,
                                                 columns_per_batch=4,
