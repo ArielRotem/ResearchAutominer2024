@@ -1260,38 +1260,42 @@ def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, 
     return data
 
 
-def flag_infectious_indication_from_free_text(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5):
-    """
-    Checks if an infectious phrase (1-3 words) exists in the text without negation in the 2 words before.
-    If found, returns 1 and a debug snippet (up to `context_window` words before the phrase).
-    """
+def flag_infectious_indication_from_free_text(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5, partialMatch=False):
     col_idx = column_name_to_index(data, column_name)
     infectious_phrases_split = [phrase.lower().split() for phrase in infectious_phrases]
     negation_prefixes_lower = [n.lower() for n in negation_prefixes]
 
     def process_text(text):
-        words = str(text).lower().split()
+        words = re.findall(r'\b\w+\b', str(text).lower())
         for i in range(len(words)):
             for phrase_words in infectious_phrases_split:
                 n = len(phrase_words)
                 if i + n > len(words):
                     continue
-                # check if sequence matches
-                if words[i:i+n] == phrase_words:
-                    # check negation before
-                    preceding = words[max(0, i-2):i]
-                    if any(neg in preceding for neg in negation_prefixes_lower):
+
+                segment = words[i:i+n]
+                if n == 1 and partialMatch:
+                    if not any(phrase_words[0] in word for word in segment):
                         continue
-                    # valid match
-                    snippet_start = max(0, i - context_window)
-                    snippet = ' '.join(words[snippet_start:i+n])
-                    return (1, snippet)
+                else:
+                    if segment != phrase_words:
+                        continue
+
+                # check for negation
+                preceding = words[max(0, i - 3):i]
+                if any(neg in preceding for neg in negation_prefixes_lower):
+                    continue
+
+                snippet_start = max(0, i - context_window)
+                snippet = ' '.join(words[snippet_start:i + n])
+                return (1, snippet)
         return (0, '')
 
     results = data.iloc[:, col_idx].apply(process_text)
     data[result_col] = results.apply(lambda x: x[0])
     data[snippet_col] = results.apply(lambda x: x[1])
     return data
+
 
 
 def extract_sentences_containing_words(data, column_name, keywords, negation_prefixes, result_column_name):
@@ -1933,31 +1937,32 @@ def main():
 
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
-                            infectious_phrases=["חום", "חומים", "פקקת", "דלקת", "אבצס", "קולקציה", "OVT", "abscess", "fever", "inflammation", "collection", "מזוהמת", "זיהום"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
+                            infectious_phrases=["חום", "חומים", "פקקת", "דלקת", "אבצס", "קולקציה", "מזוהמת", "זיהום", "OVT", "abscess", "fever", "inflammation", "collection"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
                             result_col="Imaging_Infectious_Reason",
-                            snippet_col="Infectious_Reason_Snippet"
+                            snippet_col="Infectious_Reason_Snippet",
+                            partialMatch=True
     )
 
 
     data = extract_sentences_containing_words(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             keywords=["קולקציה"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
                             result_column_name="Imaging_Collection_Sentences_Extracted"
     )
 
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
-                            infectious_phrases=["פקקת", "OVT"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
+                            infectious_phrases=["פקקת", "טרומבוזיס", "OVT"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא", "בשאלה"],
                             result_col="Imaging_OVT_YESNO",
                             snippet_col="Imaging_OVT_YESNO_Reason"
     )
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פגיעה במעי"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
                             result_col="Imaging_Intestin_YESNO",
                             snippet_col="Imaging_Intestin_YESNO_Reason"
     )
@@ -1965,7 +1970,7 @@ def main():
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פגיעה באורטר"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
                             result_col="Imaging_Oreter_YESNO",
                             snippet_col="Imaging_Oreter_YESNO_Reason"
     )
@@ -1973,7 +1978,7 @@ def main():
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["אפנדציטיס", "אפנדציט"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
                             result_col="Imaging_Appendicit_YESNO",
                             snippet_col="Imaging_Appendicit_YESNO_Reason"
     )
