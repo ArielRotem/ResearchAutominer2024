@@ -1932,8 +1932,8 @@ def main():
     data = data_singled
 
     data = flag_infectious_indication_from_free_text(data,
-                            column_name="has imaging (first ct/cti)-interpretation",
-                            infectious_words=["חום", "חומים", "פקקת", "דלקת", "אבצס", "קולקציה", "OVT", "abscess", "fever", "inflammation", "collection", "מזוהמת", "זיהום"],
+                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+                            infectious_phrases=["חום", "חומים", "פקקת", "דלקת", "אבצס", "קולקציה", "OVT", "abscess", "fever", "inflammation", "collection", "מזוהמת", "זיהום"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
                             result_col="Imaging_Infectious_Reason",
                             snippet_col="Infectious_Reason_Snippet"
@@ -1941,38 +1941,38 @@ def main():
 
 
     data = extract_sentences_containing_words(data,
-                            column_name="has imaging (first ct/cti)-interpretation",
+                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             keywords=["קולקציה"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
                             result_column_name="Imaging_Collection_Sentences_Extracted"
     )
 
     data = flag_infectious_indication_from_free_text(data,
-                            column_name="has imaging (first ct/cti)-interpretation",
-                            infectious_words=["פקקת", "OVT"],
+                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+                            infectious_phrases=["פקקת", "OVT"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
                             result_col="Imaging_OVT_YESNO",
                             snippet_col="Imaging_OVT_YESNO_Reason"
     )
     data = flag_infectious_indication_from_free_text(data,
-                            column_name="has imaging (first ct/cti)-interpretation",
-                            infectious_words=["פגיעה במעי"],
+                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+                            infectious_phrases=["פגיעה במעי"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
                             result_col="Imaging_Intestin_YESNO",
                             snippet_col="Imaging_Intestin_YESNO_Reason"
     )
 
     data = flag_infectious_indication_from_free_text(data,
-                            column_name="has imaging (first ct/cti)-interpretation",
-                            infectious_words=["פגיעה באורטר"],
+                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+                            infectious_phrases=["פגיעה באורטר"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
-                            result_col="Imaging_Orta_YESNO",
-                            snippet_col="Imaging_Orta_YESNO_Reason"
+                            result_col="Imaging_Oreter_YESNO",
+                            snippet_col="Imaging_Oreter_YESNO_Reason"
     )
 
     data = flag_infectious_indication_from_free_text(data,
-                            column_name="has imaging (first ct/cti)-interpretation",
-                            infectious_words=["אפנדציטיס", "אפנדציט"],
+                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+                            infectious_phrases=["אפנדציטיס", "אפנדציט"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
                             result_col="Imaging_Appendicit_YESNO",
                             snippet_col="Imaging_Appendicit_YESNO_Reason"
