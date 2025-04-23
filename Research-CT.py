@@ -1096,6 +1096,33 @@ def categorize_surgery_time(data, columns, result_col_label, result_col_numeric)
     return data
 
 
+def calculate_duration(data, start_column, end_column, result_column):
+    """
+    Calculates duration in hours (2 decimal places) between two datetime columns.
+    Returns empty string if either is missing or not parseable.
+    """
+    start_idx = column_name_to_index(data, start_column)
+    end_idx = column_name_to_index(data, end_column)
+
+    def compute_duration(row):
+        start_val = row.iloc[start_idx]
+        end_val = row.iloc[end_idx]
+
+        if pd.isna(start_val) or pd.isna(end_val) or str(start_val).strip() == "" or str(end_val).strip() == "":
+            return ""
+
+        try:
+            start_time = pd.to_datetime(start_val)
+            end_time = pd.to_datetime(end_val)
+            duration_hours = (end_time - start_time).total_seconds() / 3600
+            return round(duration_hours, 2)
+        except Exception:
+            return ""
+
+    data[result_column] = data.apply(compute_duration, axis=1)
+    return data
+
+
 def process_length_of_stay(data, room_col, entry_col, exit_col, step, num_batches, delivery_room_words, max_gap_minutes, result_col):
     """
     Calculate the total length of the most recent continuous stay in a delivery room.
@@ -1892,6 +1919,7 @@ def main():
 
     # Apply surgery time categorization
     data = categorize_surgery_time(data, ['surgery time-surgery start date time', 'surgery time-documenting date','חדר ניתוח גניקולוגי שעת ניתוח-שעת ניתוח-value textual', 'surgery start-value textual'], 'surgery_time_category_label', 'surgery_time_category')
+    data = calculate_duration(data, start_column="surgery start-value textual", end_column="surgery end-value textual", result_column="surgery_duration_hours")
 
     # Apply length of stay processing
     data = process_length_of_stay(data,
