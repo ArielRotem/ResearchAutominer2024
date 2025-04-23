@@ -1260,33 +1260,104 @@ def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, 
     return data
 
 
-def flag_infectious_indication_from_free_text(data, column_name, infectious_words, negation_prefixes, result_col, snippet_col, context_window=5):
+def flag_infectious_indication_from_free_text(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5):
+    """
+    Checks if an infectious phrase (1-3 words) exists in the text without negation in the 2 words before.
+    If found, returns 1 and a debug snippet (up to `context_window` words before the phrase).
+    """
     col_idx = column_name_to_index(data, column_name)
-    infectious_words_lower = [w.lower() for w in infectious_words]
-    negation_prefixes_lower = [p.lower() for p in negation_prefixes]
+    infectious_phrases_split = [phrase.lower().split() for phrase in infectious_phrases]
+    negation_prefixes_lower = [n.lower() for n in negation_prefixes]
 
-    def extract_match_snippet(text):
-        text_lower = str(text).lower()
-        words = text_lower.split()
-        for i, word in enumerate(words):
-            for infectious_word in infectious_words_lower:
-                if infectious_word in word:
-                    # Check for negation in prefix
-                    prefix_slice = words[max(i - 3, 0):i]  # Up to 3 words before
-                    joined_prefix = ' '.join(prefix_slice)
-                    if any(neg in joined_prefix for neg in negation_prefixes_lower):
-                        continue  # skip match if prefixed by negation
-
-                    # Found a match
-                    snippet_start = max(i - context_window, 0)
-                    snippet = ' '.join(words[snippet_start:i + 1])
+    def process_text(text):
+        words = str(text).lower().split()
+        for i in range(len(words)):
+            for phrase_words in infectious_phrases_split:
+                n = len(phrase_words)
+                if i + n > len(words):
+                    continue
+                # check if sequence matches
+                if words[i:i+n] == phrase_words:
+                    # check negation before
+                    preceding = words[max(0, i-2):i]
+                    if any(neg in preceding for neg in negation_prefixes_lower):
+                        continue
+                    # valid match
+                    snippet_start = max(0, i - context_window)
+                    snippet = ' '.join(words[snippet_start:i+n])
                     return (1, snippet)
-        return (0, "")
+        return (0, '')
 
-    results = data.iloc[:, col_idx].apply(extract_match_snippet)
+    results = data.iloc[:, col_idx].apply(process_text)
     data[result_col] = results.apply(lambda x: x[0])
     data[snippet_col] = results.apply(lambda x: x[1])
     return data
+
+
+def extract_sentences_containing_words(data, column_name, keywords, negation_prefixes, result_column_name):
+    """
+    From each cell in a text column, extract dot-separated sentences that contain any keyword,
+    unless the keyword is negated within the two words preceding it.
+    """
+    col_idx = column_name_to_index(data, column_name)
+    keywords_lower = [k.lower() for k in keywords]
+    negation_prefixes_lower = [n.lower() for n in negation_prefixes]
+
+    def process_text(text):
+        text_lower = str(text).lower()
+        sentences = [s.strip() for s in text_lower.split('.') if s.strip()]
+        matched_sentences = []
+
+        for sentence in sentences:
+            words = sentence.split()
+            for i, word in enumerate(words):
+                for keyword in keywords_lower:
+                    if keyword in word:
+                        # Check up to 2 preceding words for negation
+                        preceding = words[max(0, i - 2):i]
+                        if not any(neg in p for neg in negation_prefixes_lower for p in preceding):
+                            matched_sentences.append(sentence)
+                            break  # avoid double-counting same sentence
+                else:
+                    continue
+                break  # stop checking more words if sentence is already matched
+
+        return '. '.join(matched_sentences) if matched_sentences else ''
+
+    data[result_column_name] = data.iloc[:, col_idx].apply(process_text)
+    return data
+
+
+def split_rows_by_non_empty_batches(data, batch_start_col, step_size, num_batches, columns_per_batch, prefix):
+    """
+    Explodes rows by non-empty column batches, using original column names (minus _1/_2 etc.) with a prefix.
+    Each new row keeps original data + one batch copied into standardized renamed columns.
+    """
+    start_idx = column_name_to_index(data, batch_start_col)
+    result_rows = []
+
+    for _, row in data.iterrows():
+        base_row = row.to_dict()
+
+        for batch in range(num_batches):
+            batch_indices = [start_idx + batch * step_size + offset for offset in range(columns_per_batch)]
+
+            if not any(pd.notna(row.iloc[idx]) and str(row.iloc[idx]).strip() != '' for idx in batch_indices):
+                continue
+
+            new_row = base_row.copy()
+
+            for idx in batch_indices:
+                orig_col_name = data.columns[idx]
+                # Remove trailing _# or digit at the end
+                base_name = re.sub(r'[_ ]?\d+$', '', orig_col_name)
+                new_col_name = f"{prefix}{base_name}"
+                new_row[new_col_name] = row.iloc[idx]
+
+            result_rows.append(new_row)
+
+    return pd.DataFrame(result_rows)
+
 
 
 organism_dict = {
@@ -1840,6 +1911,7 @@ def main():
                                       result_organism_categories='other_culture_categories_detected',
                                       organism_translation_dict=organism_dict)
 
+
     data = imaging_guided_drainage_detected(data,
                                                 static_col="imaging_ first cti/usi-performed procedures",
                                                 repeated_col="imaging_ct/cti (first 10)-performed procedures_1",
@@ -1849,12 +1921,61 @@ def main():
                                                 result_col_name="Imaging_Guided_Drainage"
     )
 
+    data_singled = split_rows_by_non_empty_batches(data,
+                                                batch_start_col="maging_ct/cti (first 10)-performed procedures_1",
+                                                step_size=4,
+                                                num_batches=6,
+                                                columns_per_batch=4,
+                                                prefix="Singled_"
+    )
+    print(len(data), " rows before splitting CTs, ", len(data_singled), " after.")
+    data = data_singled
+
     data = flag_infectious_indication_from_free_text(data,
                             column_name="has imaging (first ct/cti)-interpretation",
-                            infectious_words=["חום", "חומים", "דלקת", "אבצס", "קולקציה", "OVT", "abscess", "fever", "inflammation", "collection", "מזוהמת", "זיהום"],
+                            infectious_words=["חום", "חומים", "פקקת", "דלקת", "אבצס", "קולקציה", "OVT", "abscess", "fever", "inflammation", "collection", "מזוהמת", "זיהום"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
                             result_col="Imaging_Infectious_Reason",
                             snippet_col="Infectious_Reason_Snippet"
+    )
+
+
+    data = extract_sentences_containing_words(data,
+                            column_name="has imaging (first ct/cti)-interpretation",
+                            keywords=["קולקציה"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
+                            result_column_name="Imaging_Collection_Sentences_Extracted"
+    )
+
+    data = flag_infectious_indication_from_free_text(data,
+                            column_name="has imaging (first ct/cti)-interpretation",
+                            infectious_words=["פקקת", "OVT"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה"],
+                            result_col="Imaging_OVT_YESNO",
+                            snippet_col="Imaging_OVT_YESNO_Reason"
+    )
+    data = flag_infectious_indication_from_free_text(data,
+                            column_name="has imaging (first ct/cti)-interpretation",
+                            infectious_words=["פגיעה במעי"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
+                            result_col="Imaging_Intestin_YESNO",
+                            snippet_col="Imaging_Intestin_YESNO_Reason"
+    )
+
+    data = flag_infectious_indication_from_free_text(data,
+                            column_name="has imaging (first ct/cti)-interpretation",
+                            infectious_words=["פגיעה באורטר"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
+                            result_col="Imaging_Orta_YESNO",
+                            snippet_col="Imaging_Orta_YESNO_Reason"
+    )
+
+    data = flag_infectious_indication_from_free_text(data,
+                            column_name="has imaging (first ct/cti)-interpretation",
+                            infectious_words=["אפנדציטיס", "אפנדציט"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה"],
+                            result_col="Imaging_Appendicit_YESNO",
+                            snippet_col="Imaging_Appendicit_YESNO_Reason"
     )
 
 
