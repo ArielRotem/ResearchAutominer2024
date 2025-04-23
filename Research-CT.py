@@ -1070,25 +1070,29 @@ def categorize_full_dilation(data, column, result_col):
     data[result_col] = data.apply(is_full_dilation, axis=1)
     return data
 
-def categorize_surgery_time(data, column, result_col):
-    col_idx = column_name_to_index(data, column)
-    
+def categorize_surgery_time(data, columns, result_col_label, result_col_numeric):
+    col_indices = [column_name_to_index(data, col) for col in columns]
+
     def classify_time(row):
-        if pd.isna(row.iloc[col_idx]) or str(row.iloc[col_idx]).strip() == "":
-            return ""  # Empty if no time
-        
-        try:
-            hour = pd.to_datetime(row.iloc[col_idx]).hour
-            if 7 <= hour < 16:
-                return "Day"
-            elif 16 <= hour < 21:
-                return "Evening"
-            else:
-                return "Night"
-        except Exception:
-            return ""  # Empty on parse failure too
-    
-    data[result_col] = data.apply(classify_time, axis=1)
+        for idx in col_indices:
+            cell = row.iloc[idx]
+            if pd.isna(cell) or str(cell).strip() == "":
+                continue
+            try:
+                hour = pd.to_datetime(cell).hour
+                if 7 <= hour < 16:
+                    return ("Day", 0)
+                elif 16 <= hour < 21:
+                    return ("Evening", 1)
+                else:
+                    return ("Night", 2)
+            except Exception:
+                continue
+        return ("", "")
+
+    results = data.apply(classify_time, axis=1)
+    data[result_col_label] = results.apply(lambda x: x[0])
+    data[result_col_numeric] = results.apply(lambda x: x[1])
     return data
 
 
@@ -1887,7 +1891,7 @@ def main():
     data = categorize_full_dilation(data, 'full dilation at surgery-value numeric', 'full_dilation_at_surgery_yes_or_no')
 
     # Apply surgery time categorization
-    data = categorize_surgery_time(data, 'surgery time-documenting date', 'surgery_time_category')
+    data = categorize_surgery_time(data, ['surgery time-surgery start date time', 'surgery time-documenting date','חדר ניתוח גניקולוגי שעת ניתוח-שעת ניתוח-value textual', 'surgery start-value textual'], 'surgery_time_category_label', 'surgery_time_category')
 
     # Apply length of stay processing
     data = process_length_of_stay(data,
@@ -1937,7 +1941,7 @@ def main():
 
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
-                            infectious_phrases=["חום", "חומים", "פקקת", "דלקת", "אבצס", "קולקציה", "מזוהמת", "זיהום", "OVT", "abscess", "fever", "inflammation", "collection"],
+                            infectious_phrases=["חום", "חומים", "פקקת", "דלקת", "אבצס", "אבסס", "מורסה", "קולקציה", "מזוהמת", "זיהום", "OVT", "abscess", "fever", "inflammation", "collection"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
                             result_col="Imaging_Infectious_Reason",
                             snippet_col="Infectious_Reason_Snippet",
@@ -1954,7 +1958,7 @@ def main():
 
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
-                            infectious_phrases=["פקקת", "טרומבוזיס", "OVT"],
+                            infectious_phrases=["פקקת", "טרומבוזיס", "טרומבוסיס", "OVT"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא", "בשאלה"],
                             result_col="Imaging_OVT_YESNO",
                             snippet_col="Imaging_OVT_YESNO_Reason"
