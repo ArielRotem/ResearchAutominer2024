@@ -1098,7 +1098,7 @@ def categorize_surgery_time(data, columns, result_col_label, result_col_numeric)
 
 def calculate_duration(data, start_column, end_column, result_column):
     """
-    Calculates duration in minutes (2 decimal places) between two datetime columns.
+    Calculates duration in hours (2 decimal places) between two datetime columns.
     Returns empty string if either is missing or not parseable.
     """
     start_idx = column_name_to_index(data, start_column)
@@ -1114,8 +1114,8 @@ def calculate_duration(data, start_column, end_column, result_column):
         try:
             start_time = pd.to_datetime(start_val)
             end_time = pd.to_datetime(end_val)
-            duration_minutes = (end_time - start_time).total_seconds() / 60
-            return round(duration_minutes, 2)
+            duration_hours = (end_time - start_time).total_seconds() / 3600
+            return round(duration_hours, 2)
         except Exception:
             return ""
 
