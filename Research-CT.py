@@ -1394,23 +1394,22 @@ def split_rows_by_non_empty_batches(data, batch_start_col, step_size, num_batche
     return pd.DataFrame(result_rows)
 
 
-def check_disinfection_components(data, text_col, dict_col, backup_col, result_col, keyword_dict):
+def check_disinfection_components(data, text_col, scrub_raw_data_col, backup_col, result_col, keyword_dict):
     """
     Checks for presence of 3 disinfection components based on:
     1. A free-text field (e.g. 'scrub-value textual')
-    2. A dict-style column (e.g. 'filtered keys'), checking both keys and values
-    3. A backup column where 'בוצע' overrides missing data
-    
+    2. A raw semicolon-delimited field (e.g. 'filtered keys' text)
+    3. A backup field (e.g. 'surgery reports-disinfection') where 'בוצע' means complete
+
     Returns:
     - 1 if all 3 components found
     - 0 if only 1–2 found
     - 2 if nothing found (unless 'בוצע' in backup_col, then 1)
     """
     text_idx = column_name_to_index(data, text_col)
-    dict_idx = column_name_to_index(data, dict_col)
+    raw_idx = column_name_to_index(data, scrub_raw_data_col)
     backup_idx = column_name_to_index(data, backup_col)
 
-    # lowercase the search terms for easy comparison
     lowered_keywords = {
         component: [w.lower() for w in words]
         for component, words in keyword_dict.items()
@@ -1418,32 +1417,26 @@ def check_disinfection_components(data, text_col, dict_col, backup_col, result_c
 
     def evaluate_row(row):
         found_components = set()
-        text_val = str(row.iloc[text_idx]).lower() if pd.notna(row.iloc[text_idx]) else ""
-        dict_val = row.iloc[dict_idx]
-        backup_val = str(row.iloc[backup_idx]).strip() if pd.notna(row.iloc[backup_idx]) else ""
 
-        # From text field
+        # First source: free text
+        text_val = str(row.iloc[text_idx]).lower() if pd.notna(row.iloc[text_idx]) else ""
         for component, keywords in lowered_keywords.items():
             if any(kw in text_val for kw in keywords):
                 found_components.add(component)
 
-        # From filtered dict column (keys and values)
-        if isinstance(dict_val, dict):
-            items = list(dict_val.items())
-        else:
-            try:
-                items = list(eval(dict_val).items()) if isinstance(dict_val, str) else []
-            except:
-                items = []
+        # Second source: semicolon-split raw field
+        raw_val = row.iloc[raw_idx]
+        if pd.notna(raw_val):
+            parts = str(raw_val).split(";")
+            for section in parts:
+                section = section.strip().lower()
+                for component, keywords in lowered_keywords.items():
+                    if any(kw in section for kw in keywords):
+                        found_components.add(component)
 
-        for key, value in items:
-            key = str(key).lower()
-            value = str(value).lower()
-            for component, keywords in lowered_keywords.items():
-                if any(kw in key or kw in value for kw in keywords):
-                    found_components.add(component)
+        # Third source: backup field
+        backup_val = str(row.iloc[backup_idx]).strip() if pd.notna(row.iloc[backup_idx]) else ""
 
-        # Decision logic
         if len(found_components) == 3:
             return 1
         elif len(found_components) > 0:
@@ -1455,6 +1448,7 @@ def check_disinfection_components(data, text_col, dict_col, backup_col, result_c
 
     data[result_col] = data.apply(evaluate_row, axis=1)
     return data
+
 
 
 def find_closest_lab_value(
