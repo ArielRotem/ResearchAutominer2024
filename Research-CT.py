@@ -2149,7 +2149,7 @@ def main():
     data = check_disinfection_components(
         data=data,
         text_col="scrub-value textual",
-        dict_col="scrub-all row data",
+        scrub_raw_data_col="scrub-all row data",
         backup_col="surgery reports-disinfection",
         result_col="sufficient_disinfection",
         keyword_dict=keyword_dict
