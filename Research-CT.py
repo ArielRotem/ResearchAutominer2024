@@ -928,7 +928,7 @@ def extract_and_filter_raw_map(data, input_column, substrings, new_column_name):
 
         # Print an error if duplicate keys are found
         if duplicate_keys:
-            print(f"Duplicate keys found in row:.. Duplicates: {duplicate_keys}")
+            #print(f"Duplicate keys found in row:.. Duplicates: {duplicate_keys}")
 
         # Filter the dictionary for keys containing any of the substrings (case-insensitive)
         filtered_dict = {
@@ -1508,6 +1508,7 @@ def find_closest_lab_value(
         if before:
             return sorted(before)[0][1]
         elif after:
+            #print("using after value", sorted(after)[0][1])
             return sorted(after)[0][1]
         else:
             return ""
@@ -1789,7 +1790,7 @@ def main():
     words_dict_2 = {
         "1": ["בוצע", "בוצע עי דר הראל"]
     }
-    update_column_with_values(data, 'complications-value textual', words_dict_2, default_value="Other", empty_value="0")
+    update_column_with_values(data, 'amniofusion-non-numeric result', words_dict_2, default_value="Other", empty_value="0")
 
      #*עמודה - בשם surgery reports-surgery date-weekday
     words_dict_3 = {
@@ -1797,7 +1798,7 @@ def main():
         "2": ["Monday"],
         "3": ["Tuesday"],
         "4": ["Wednesday"],
-        "5": ["Thursay"],
+        "5": ["Thursday"],
         "6": ["Friday"],
         "7": ["Saturday"]
     }
@@ -1805,7 +1806,7 @@ def main():
     
       #*עמודה - בשם surgery info-procedure
     words_dict_4 = {
-        "1": ["LSCS","LOW SEGMENT CESAREAN SECTION","CESAREAN DELIVERY L.S.C.S"],
+        "1": ["LSCS","LOW SEGMENT CESAREAN SECTION","CESAREAN DELIVERY L.S.C.S", "CESAREAN SECTION"],
         "2": ["HIGH TRANSVERSE CESAREAN SECTION"],
         "3": ["CESAREAN HYSTERECTOMY", "CESAREAN DELIVERY AND HYSTERECTOMY"],
         "4": ["CLASSICAL"],
@@ -2158,17 +2159,40 @@ def main():
 
     data = find_closest_lab_value(
         data=data,
-        start_col="WBC_1",
+        start_col="wbc (first 15)-numeric result_1",
         step_size=2,
         num_batches=15,
-        date_col_offset=1,
-        ct_time_reference_col="ct_days_from_reference",
-        max_gap_hours_before=48,
+        date_col_offset=-1,
+        ct_time_reference_col="Singled_imaging_ct/cti (first 10)-exam start time-days from reference",
+        max_gap_hours_before=24,
         result_col="closest_WBC",
         max_gap_hours_after=12
     )
 
-
+    data = find_closest_lab_value(
+        data=data,
+        start_col="crp (first 15)-numeric result_1",
+        step_size=2,
+        num_batches=15,
+        date_col_offset=-1,
+        ct_time_reference_col="Singled_imaging_ct/cti (first 10)-exam start time-days from reference",
+        max_gap_hours_before=24,
+        result_col="closest_CRP",
+        max_gap_hours_after=12
+    )
+    
+    data = find_closest_lab_value(
+        data=data,
+        start_col="plt (first 15)-numeric result_1",
+        step_size=2,
+        num_batches=15,
+        date_col_offset=-1,
+        ct_time_reference_col="Singled_imaging_ct/cti (first 10)-exam start time-days from reference",
+        max_gap_hours_before=24,
+        result_col="closest_PLT",
+        max_gap_hours_after=12
+    )
+    
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
     #    'reference occurrence number',
