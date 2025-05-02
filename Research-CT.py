@@ -1394,6 +1394,142 @@ def split_rows_by_non_empty_batches(data, batch_start_col, step_size, num_batche
     return pd.DataFrame(result_rows)
 
 
+def check_disinfection_components(data, text_col, dict_col, backup_col, result_col, keyword_dict):
+    """
+    Checks for presence of 3 disinfection components based on:
+    1. A free-text field (e.g. 'scrub-value textual')
+    2. A dict-style column (e.g. 'filtered keys'), checking both keys and values
+    3. A backup column where 'בוצע' overrides missing data
+    
+    Returns:
+    - 1 if all 3 components found
+    - 0 if only 1–2 found
+    - 2 if nothing found (unless 'בוצע' in backup_col, then 1)
+    """
+    text_idx = column_name_to_index(data, text_col)
+    dict_idx = column_name_to_index(data, dict_col)
+    backup_idx = column_name_to_index(data, backup_col)
+
+    # lowercase the search terms for easy comparison
+    lowered_keywords = {
+        component: [w.lower() for w in words]
+        for component, words in keyword_dict.items()
+    }
+
+    def evaluate_row(row):
+        found_components = set()
+        text_val = str(row.iloc[text_idx]).lower() if pd.notna(row.iloc[text_idx]) else ""
+        dict_val = row.iloc[dict_idx]
+        backup_val = str(row.iloc[backup_idx]).strip() if pd.notna(row.iloc[backup_idx]) else ""
+
+        # From text field
+        for component, keywords in lowered_keywords.items():
+            if any(kw in text_val for kw in keywords):
+                found_components.add(component)
+
+        # From filtered dict column (keys and values)
+        if isinstance(dict_val, dict):
+            items = list(dict_val.items())
+        else:
+            try:
+                items = list(eval(dict_val).items()) if isinstance(dict_val, str) else []
+            except:
+                items = []
+
+        for key, value in items:
+            key = str(key).lower()
+            value = str(value).lower()
+            for component, keywords in lowered_keywords.items():
+                if any(kw in key or kw in value for kw in keywords):
+                    found_components.add(component)
+
+        # Decision logic
+        if len(found_components) == 3:
+            return 1
+        elif len(found_components) > 0:
+            return 0
+        elif backup_val == "בוצע":
+            return 1
+        else:
+            return 2
+
+    data[result_col] = data.apply(evaluate_row, axis=1)
+    return data
+
+
+def find_closest_lab_value(
+    data,
+    start_col,
+    step_size,
+    num_batches,
+    date_col_offset,
+    surgery_time_reference_col,
+    max_gap_hours_before,
+    result_col,
+    max_gap_hours_after=None
+):
+    """
+    For each row, finds the lab value closest to the surgery time (or other reference time),
+    searching through repeated value + datetime column batches.
+
+    Args:
+        start_col: First value column (e.g. "CRP_1")
+        step_size: How many columns per batch (usually 2)
+        num_batches: How many batches (e.g. 15)
+        date_col_offset: Index offset from start_col to corresponding datetime column in the batch
+        surgery_time_reference_col: Column containing the datetime to compare against
+        max_gap_hours_before: Max gap allowed before the surgery time
+        result_col: Output column name for the closest value
+        max_gap_hours_after: Optional. Max gap allowed after the surgery time (if before fails)
+    """
+    start_idx = column_name_to_index(data, start_col)
+    ref_idx = column_name_to_index(data, surgery_time_reference_col)
+
+    def find_best_match(row):
+        reference_time_raw = row.iloc[ref_idx]
+        if pd.isna(reference_time_raw) or str(reference_time_raw).strip() == "":
+            return ""
+
+        try:
+            reference_time = pd.to_datetime(reference_time_raw)
+        except Exception:
+            return ""
+
+        candidates = []
+
+        for i in range(num_batches):
+            val_idx = start_idx + i * step_size
+            date_idx = val_idx + date_col_offset
+
+            try:
+                val = row.iloc[val_idx]
+                date_raw = row.iloc[date_idx]
+                if pd.isna(date_raw) or str(date_raw).strip() == "":
+                    continue
+                date = pd.to_datetime(date_raw)
+                delta_hours = (reference_time - date).total_seconds() / 3600
+                candidates.append((delta_hours, val))
+            except Exception:
+                continue
+
+        # Separate into before and after
+        before = [(abs(d), v) for d, v in candidates if d >= 0 and d <= max_gap_hours_before]
+        after = []
+        if max_gap_hours_after and max_gap_hours_after > 0:
+            after = [(abs(d), v) for d, v in candidates if d < 0 and abs(d) <= max_gap_hours_after]
+
+        if before:
+            return sorted(before)[0][1]
+        elif after:
+            return sorted(after)[0][1]
+        else:
+            return ""
+
+    data[result_col] = data.apply(find_best_match, axis=1)
+    return data
+
+
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -2015,6 +2151,34 @@ def main():
                             snippet_col="Imaging_Appendicit_YESNO_Reason"
     )
 
+
+    keyword_dict = {
+    "chlorhexidine": ["chlorhexidine", "chlorazadrin", "כלורהקסידין"],
+    "scrub": ["septal scrub", "ספטל סקרב"],
+    "povidone": ["povidone", "polydine", "פולידין"]
+    }
+
+    data = check_disinfection_components(
+        data=data,
+        text_col="scrub-value textual",
+        dict_col="filtered keys",
+        backup_col="surgery reports-disinfection",
+        result_col="disinfection_quality",
+        keyword_dict=keyword_dict
+    )
+
+
+    data = find_closest_lab_value(
+        data=data,
+        start_col="CRP_1",
+        step_size=2,
+        num_batches=15,
+        date_col_offset=1,
+        surgery_time_reference_col="imaging time",
+        max_gap_hours_before=48,
+        result_col="closest_CRP_value"
+        # max_gap_hours_after left empty by default
+    )
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
