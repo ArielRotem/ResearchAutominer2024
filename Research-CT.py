@@ -2147,17 +2147,17 @@ def main():
 
 
     keyword_dict = {
-    "chlorhexidine": ["chlorhexidine", "chlorazadrin", "כלורהקסידין"],
-    "scrub": ["septal scrub", "ספטל סקרב"],
+    "chlorhexidine": ["כלורהקסידין", "Alcohol 70%+Chlorhexidine 0.5%"],
+    "scrub": ["septal scrub", "ספטל סקרב", "septal acrub", "Chlorhexidine 4%"],
     "povidone": ["povidone", "polydine", "פולידין"]
     }
 
     data = check_disinfection_components(
         data=data,
         text_col="scrub-value textual",
-        dict_col="filtered keys",
+        dict_col="scrub-all row data",
         backup_col="surgery reports-disinfection",
-        result_col="disinfection_quality",
+        result_col="sufficient_disinfection",
         keyword_dict=keyword_dict
     )
 
