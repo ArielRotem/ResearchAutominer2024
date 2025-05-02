@@ -1463,35 +1463,32 @@ def find_closest_lab_value(
     step_size,
     num_batches,
     date_col_offset,
-    surgery_time_reference_col,
+    ct_time_reference_col,
     max_gap_hours_before,
     result_col,
     max_gap_hours_after=None
 ):
     """
-    For each row, finds the lab value closest to the surgery time (or other reference time),
-    searching through repeated value + datetime column batches.
+    For each row, finds the lab value closest to the CT (based on days-from-reference values).
+    
+    Assumes all timestamps are expressed as floats (days from a common reference).
 
     Args:
-        start_col: First value column (e.g. "CRP_1")
-        step_size: How many columns per batch (usually 2)
-        num_batches: How many batches (e.g. 15)
-        date_col_offset: Index offset from start_col to corresponding datetime column in the batch
-        surgery_time_reference_col: Column containing the datetime to compare against
-        max_gap_hours_before: Max gap allowed before the surgery time
-        result_col: Output column name for the closest value
-        max_gap_hours_after: Optional. Max gap allowed after the surgery time (if before fails)
+        start_col: First lab value column (e.g. "CRP_1")
+        step_size: Number of columns per lab batch (usually 2)
+        num_batches: Number of lab batches (e.g. 15)
+        date_col_offset: Offset to the "days-from-reference" field within each batch
+        ct_time_reference_col: Column containing the CT time in days-from-reference (float)
+        max_gap_hours_before: Max hours before the CT allowed
+        result_col: Column to write the result into
+        max_gap_hours_after: Optional max hours after the CT allowed (default: None)
     """
     start_idx = column_name_to_index(data, start_col)
-    ref_idx = column_name_to_index(data, surgery_time_reference_col)
+    ref_idx = column_name_to_index(data, ct_time_reference_col)
 
     def find_best_match(row):
-        reference_time_raw = row.iloc[ref_idx]
-        if pd.isna(reference_time_raw) or str(reference_time_raw).strip() == "":
-            return ""
-
         try:
-            reference_time = pd.to_datetime(reference_time_raw)
+            reference_days = float(row.iloc[ref_idx])
         except Exception:
             return ""
 
@@ -1503,16 +1500,12 @@ def find_closest_lab_value(
 
             try:
                 val = row.iloc[val_idx]
-                date_raw = row.iloc[date_idx]
-                if pd.isna(date_raw) or str(date_raw).strip() == "":
-                    continue
-                date = pd.to_datetime(date_raw)
-                delta_hours = (reference_time - date).total_seconds() / 3600
+                lab_days = float(row.iloc[date_idx])
+                delta_hours = (reference_days - lab_days) * 24
                 candidates.append((delta_hours, val))
             except Exception:
                 continue
 
-        # Separate into before and after
         before = [(abs(d), v) for d, v in candidates if d >= 0 and d <= max_gap_hours_before]
         after = []
         if max_gap_hours_after and max_gap_hours_after > 0:
@@ -1527,6 +1520,7 @@ def find_closest_lab_value(
 
     data[result_col] = data.apply(find_best_match, axis=1)
     return data
+
 
 
 
@@ -2170,15 +2164,16 @@ def main():
 
     data = find_closest_lab_value(
         data=data,
-        start_col="CRP_1",
+        start_col="WBC_1",
         step_size=2,
         num_batches=15,
         date_col_offset=1,
-        surgery_time_reference_col="imaging time",
+        ct_time_reference_col="ct_days_from_reference",
         max_gap_hours_before=48,
-        result_col="closest_CRP_value"
-        # max_gap_hours_after left empty by default
+        result_col="closest_WBC",
+        max_gap_hours_after=12
     )
+
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
