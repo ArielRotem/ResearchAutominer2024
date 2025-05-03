@@ -927,7 +927,7 @@ def extract_and_filter_raw_map(data, input_column, substrings, new_column_name):
             row_dict[key] = value
 
         # Print an error if duplicate keys are found
-        if duplicate_keys:
+        #if duplicate_keys:
             #print(f"Duplicate keys found in row:.. Duplicates: {duplicate_keys}")
 
         # Filter the dictionary for keys containing any of the substrings (case-insensitive)
@@ -1566,7 +1566,7 @@ def flag_antibiotic_change_due_to_growth(
     debug_col,
     max_hours_for_empiric_antibiotic=24,
     min_hours_after_collection_check_antibiotic_change=24,
-    max_hours_after_collection_check_antibiotic_change=48
+    max_hours_after_collection_check_antibiotic_change=72
 ):
     """
     Flags if there was a change in antibiotic treatment following a culture growth.
@@ -1601,7 +1601,6 @@ def flag_antibiotic_change_due_to_growth(
                 continue
 
         abx_events.sort()
-
         for i in range(culture_batches):
             time_idx = culture_time_idx + i * culture_step
             org_idx = time_idx + organism_offset
@@ -1618,7 +1617,6 @@ def flag_antibiotic_change_due_to_growth(
                 n for t, n in abx_events
                 if abs(t - culture_time) <= max_hours_for_empiric_antibiotic
             )
-
             if not empiric_abx:
                 continue
 
@@ -1627,11 +1625,10 @@ def flag_antibiotic_change_due_to_growth(
                 (t, n) for t, n in abx_events
                 if culture_time + min_hours_after_collection_check_antibiotic_change <= t <= culture_time + max_hours_after_collection_check_antibiotic_change
             ]
-
             # Step 3: Look for any "after" antibiotic not already in empiric
             for t, n in after_abx:
                 if n not in empiric_abx:
-                    debug = f"growth:{organism} @ {culture_time:.1f}h | empiric:{', '.join(empiric_abx)} | change:{n} @ {t:.1f}h"
+                    debug = f"growth:{organism} @ {culture_time:.1f}h from ref | empiric:{', '.join(empiric_abx)} | change:{n} @ {t-culture_time:.1f}hours after culture time"
                     return pd.Series([1, debug])
 
         return pd.Series([0, ""])
@@ -2279,7 +2276,7 @@ def main():
 
     data = find_closest_lab_value(
         data=data,
-        start_col="wbc (first 15)-numeric result_1",
+        start_col="wbc (first 50)-numeric result_1",
         step_size=2,
         num_batches=15,
         date_col_offset=-1,
@@ -2291,7 +2288,7 @@ def main():
 
     data = find_closest_lab_value(
         data=data,
-        start_col="crp (first 15)-numeric result_1",
+        start_col="crp (first 50)-numeric result_1",
         step_size=2,
         num_batches=15,
         date_col_offset=-1,
@@ -2303,7 +2300,7 @@ def main():
     
     data = find_closest_lab_value(
         data=data,
-        start_col="plt (first 15)-numeric result_1",
+        start_col="plt (first 50)-numeric result_1",
         step_size=2,
         num_batches=15,
         date_col_offset=-1,
@@ -2322,11 +2319,11 @@ def main():
     data = flag_antibiotic_change_due_to_growth(
         data=data,
         culture_time_col="blood cultures-collection date-days from reference_1",
-        organism_offset=1,
+        organism_offset=-1,
         culture_step=4,
-        culture_batches=40,
+        culture_batches=50,
         antibiotic_name_col="antibiotics-medication_1",
-        antibiotic_time_offset=-1,
+        antibiotic_time_offset=-2,
         antibiotic_step=3,
         antibiotic_batches=108,
         result_col="antibiotic_change_due_to_growth",
