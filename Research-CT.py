@@ -1575,6 +1575,7 @@ def flag_antibiotic_change_due_to_growth(
     - A different antibiotic (not previously given) was given within [min, max] hours after
 
     Antibiotic names are sanitized to ignore dose/unit info.
+    Multiple matches are collected and concatenated into the debug column.
     """
 
     def _sanitize_antibiotic_name(name):
@@ -1601,6 +1602,8 @@ def flag_antibiotic_change_due_to_growth(
                 continue
 
         abx_events.sort()
+        debug_matches = []
+
         for i in range(culture_batches):
             time_idx = culture_time_idx + i * culture_step
             org_idx = time_idx + organism_offset
@@ -1612,29 +1615,32 @@ def flag_antibiotic_change_due_to_growth(
             except:
                 continue
 
-            # Step 1: Collect empiric antibiotics ± max_hours
             empiric_abx = set(
                 n for t, n in abx_events
                 if abs(t - culture_time) <= max_hours_for_empiric_antibiotic
             )
+
             if not empiric_abx:
                 continue
 
-            # Step 2: Collect antibiotics given after culture
             after_abx = [
                 (t, n) for t, n in abx_events
                 if culture_time + min_hours_after_collection_check_antibiotic_change <= t <= culture_time + max_hours_after_collection_check_antibiotic_change
             ]
-            # Step 3: Look for any "after" antibiotic not already in empiric
+
             for t, n in after_abx:
                 if n not in empiric_abx:
-                    debug = f"growth:{organism} @ {culture_time:.1f}h from ref | empiric:{', '.join(empiric_abx)} | change:{n} @ {t-culture_time:.1f}hours after culture time"
-                    return pd.Series([1, debug])
+                    debug_str = f"growth:{organism} @ {culture_time:.1f}h | empiric:{', '.join(empiric_abx)} | change:{n} @ {t:.1f}h"
+                    debug_matches.append(debug_str)
 
-        return pd.Series([0, ""])
+        if debug_matches:
+            return pd.Series([1, "; ".join(debug_matches)])
+        else:
+            return pd.Series([0, ""])
 
     data[[result_col, debug_col]] = data.apply(check_row, axis=1)
     return data
+
 
 
 organism_dict = {
