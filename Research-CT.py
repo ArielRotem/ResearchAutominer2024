@@ -1575,7 +1575,7 @@ def flag_antibiotic_change_due_to_growth(
     - A different antibiotic (not previously given) was given within [min, max] hours after
 
     Antibiotic names are sanitized to ignore dose/unit info.
-    Multiple matches are collected and concatenated into the debug column.
+    Multiple changes for a culture are grouped into one debug line.
     """
 
     def _sanitize_antibiotic_name(name):
@@ -1628,18 +1628,24 @@ def flag_antibiotic_change_due_to_growth(
                 if culture_time + min_hours_after_collection_check_antibiotic_change <= t <= culture_time + max_hours_after_collection_check_antibiotic_change
             ]
 
-            for t, n in after_abx:
-                if n not in empiric_abx:
-                    debug_str = f"growth:{organism} @ {culture_time:.1f}h | empiric:{', '.join(empiric_abx)} | change:{n} @ {t:.1f}h"
-                    debug_matches.append(debug_str)
+            changed_abx = [(t, n) for t, n in after_abx if n not in empiric_abx]
+
+            if changed_abx:
+                changes_str = "; ".join([f"{n} @ {t - culture_time:.1f}h" for t, n in changed_abx])
+                debug_str = (
+                    f"growth:{organism} @ {culture_time:.1f}h from ref | "
+                    f"empiric:{', '.join(empiric_abx)} | change(s): {changes_str} after culture time"
+                )
+                debug_matches.append(debug_str)
 
         if debug_matches:
-            return pd.Series([1, "; ".join(debug_matches)])
+            return pd.Series([1, " ### ".join(debug_matches)])
         else:
             return pd.Series([0, ""])
 
     data[[result_col, debug_col]] = data.apply(check_row, axis=1)
     return data
+
 
 
 
