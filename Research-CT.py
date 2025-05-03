@@ -1517,7 +1517,127 @@ def find_closest_lab_value(
     return data
 
 
+def detect_multiple_antibiotics(data, source_col, result_col):
+    """
+    Detects if more than one unique antibiotic name appears in the comma-separated field.
+    - Merges comma-formatted numbers (e.g. 1,000,000 → 1000000)
+    - Keeps only ALL-CAPS names at the beginning of each comma-separated part
+    - Deduplicates by name
+    - Returns 1 if more than one unique name exists, else 0
+    """
+    col_idx = column_name_to_index(data, source_col)
 
+    def extract_names(row):
+        raw = row.iloc[col_idx]
+        if pd.isna(raw) or str(raw).strip() == "":
+            return 0
+
+        # Merge things like "1,000,000" into "1000000"
+        cleaned = re.sub(r'(\d),(\d{3})', r'\1\2', str(raw))
+
+        # Split and clean each entry
+        parts = [p.strip() for p in cleaned.split(",")]
+        parts = [p for p in parts if p]
+
+        names = set()
+        for part in parts:
+            # Match all-caps name at the beginning (e.g. "AMPISHEKER", "PIPERACILLIN TAZOBACTAM")
+            match = re.match(r'^([A-Z]+(?: [A-Z]+)*)', part)
+            if match:
+                names.add(match.group(1).strip())
+
+        return 1 if len(names) > 1 else 0
+
+    data[result_col] = data.apply(extract_names, axis=1)
+    return data
+
+
+def flag_antibiotic_change_due_to_growth(
+    data,
+    culture_time_col,
+    organism_offset,
+    culture_step,
+    culture_batches,
+    antibiotic_name_col,
+    antibiotic_time_offset,
+    antibiotic_step,
+    antibiotic_batches,
+    result_col,
+    debug_col,
+    max_hours_for_empiric_antibiotic=24,
+    min_hours_after_collection_check_antibiotic_change=24,
+    max_hours_after_collection_check_antibiotic_change=48
+):
+    """
+    Flags if there was a change in antibiotic treatment following a culture growth.
+    A change is flagged if:
+    - An empiric antibiotic was given within ±max_hours_for_empiric_antibiotic of a culture
+    - A different antibiotic (not previously given) was given within [min, max] hours after
+
+    Antibiotic names are sanitized to ignore dose/unit info.
+    """
+
+    def _sanitize_antibiotic_name(name):
+        name = str(name).strip()
+        match = re.match(r'^([A-Z]+(?: [A-Z]+)*)', name)
+        return match.group(1).strip() if match else ""
+
+    culture_time_idx = column_name_to_index(data, culture_time_col)
+    antibiotic_name_idx = column_name_to_index(data, antibiotic_name_col)
+
+    def check_row(row):
+        abx_events = []
+        for i in range(antibiotic_batches):
+            name_idx = antibiotic_name_idx + i * antibiotic_step
+            time_idx = name_idx + antibiotic_time_offset
+            try:
+                raw_name = row.iloc[name_idx]
+                raw_time = row.iloc[time_idx]
+                name = _sanitize_antibiotic_name(raw_name)
+                time = float(raw_time) * 24
+                if name and pd.notna(time):
+                    abx_events.append((time, name))
+            except:
+                continue
+
+        abx_events.sort()
+
+        for i in range(culture_batches):
+            time_idx = culture_time_idx + i * culture_step
+            org_idx = time_idx + organism_offset
+            try:
+                culture_time = float(row.iloc[time_idx]) * 24
+                organism = str(row.iloc[org_idx]).strip()
+                if organism == "" or pd.isna(organism):
+                    continue
+            except:
+                continue
+
+            # Step 1: Collect empiric antibiotics ± max_hours
+            empiric_abx = set(
+                n for t, n in abx_events
+                if abs(t - culture_time) <= max_hours_for_empiric_antibiotic
+            )
+
+            if not empiric_abx:
+                continue
+
+            # Step 2: Collect antibiotics given after culture
+            after_abx = [
+                (t, n) for t, n in abx_events
+                if culture_time + min_hours_after_collection_check_antibiotic_change <= t <= culture_time + max_hours_after_collection_check_antibiotic_change
+            ]
+
+            # Step 3: Look for any "after" antibiotic not already in empiric
+            for t, n in after_abx:
+                if n not in empiric_abx:
+                    debug = f"growth:{organism} @ {culture_time:.1f}h | empiric:{', '.join(empiric_abx)} | change:{n} @ {t:.1f}h"
+                    return pd.Series([1, debug])
+
+        return pd.Series([0, ""])
+
+    data[[result_col, debug_col]] = data.apply(check_row, axis=1)
+    return data
 
 
 organism_dict = {
@@ -2193,6 +2313,27 @@ def main():
         max_gap_hours_after=12
     )
     
+    data = detect_multiple_antibiotics(
+        data=data,
+        source_col="concat_antibiotics_given",
+        result_col="has_multiple_antibiotics"
+    )
+
+    data = flag_antibiotic_change_due_to_growth(
+        data=data,
+        culture_time_col="blood cultures-collection date-days from reference_1",
+        organism_offset=1,
+        culture_step=4,
+        culture_batches=40,
+        antibiotic_name_col="antibiotics-medication_1",
+        antibiotic_time_offset=-1,
+        antibiotic_step=3,
+        antibiotic_batches=108,
+        result_col="antibiotic_change_due_to_growth",
+        debug_col="antibiotic_change_due_to_growth_debug"
+    )
+
+
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
     #    'reference occurrence number',
