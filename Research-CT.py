@@ -1639,7 +1639,7 @@ def flag_antibiotic_change_due_to_growth(
                 debug_matches.append(debug_str)
 
         if debug_matches:
-            return pd.Series([1, " ### ".join(debug_matches)])
+            return pd.Series([1, " ### ".join(sorted(set(debug_matches)))])
         else:
             return pd.Series([0, ""])
 
@@ -1860,27 +1860,46 @@ def main():
 
     data = de_dupe_data
 
-    ## Cultures taken yes/no Follow by Positive yes/no
+    ## blood cultures taken yes/no
     data = containswords_result_exists(data, 'blood cultures-test type_1', ['דם'], 4, 40, 'blood_culture_taken')
     ## blood culture positive != bateremia so this column is not relevent for now
     ##data = containswords_andor_containswords_and_nonempty_result_exists(data, '', ['דם'], 'OR','', ['דם'], '', 8, 74, 'blood_culture_positive')
 
 
-    ## Cultures positive organisms followed by Categories
+    ## other cultures taken yes/no
+    data = containswords_result_exists(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה,'שיליה], 3, 13, 'other_culture_taken')
+
+    ## blood cultures positive organisms followed by Categories
     data = containswords_and_nonempty_result_values(data, 'blood cultures-test type_1', ['דם'], 'blood cultures-organism detected_1', 4, 40, 'blood_culture_organisms')
     data = containswords_and_nonempty_result_values(data, 'blood cultures-test type_1', ['דם'], 'blood cultures-organism detected_1', 4, 40, 'blood_culture_organisms_category', dictionary=organism_dict)
     
     data = remove_contaminant_and_count(data, 'blood_culture_organisms_category', 'Blood_culture_Type_of_growth', delimiter=',', default_value=0, contaminant='Contaminants (CONS etc.)')
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
+    
+     ## other cultures positive organisms followed by Categories
+    data = containswords_and_nonempty_result_values(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה,'שיליה], 3, 13, 'other_culture__organisms')
+    data = containswords_and_nonempty_result_values(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה,'שיליה], 3, 13, 'other_culture_organisms_category', dictionary=organism_dict)
+    
+    data = remove_contaminant_and_count(data, 'other_culture_organisms_category', 'other_culture_Type_of_growth', delimiter=',', default_value=0, contaminant='Contaminants (CONS etc.)')
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
     
     ## Antibiotics taken yes/no
     data = containswords_result_exists(data, 'antibiotics-medication_1', ['AMPICILLIN'], 3, 108, 'Antibiotics_given_Ampicillin')
@@ -1988,7 +2007,7 @@ def main():
         "1": ["גינקולוגיה", "יולדות א", "יולדות ב"],
         "2": ["א.א.ג ניתוחי ראש וצוואר", "אורולוגיה", "השהיה מלרד", "כירורגית ב", "כירורגית ג", "מלונית", "נוירולוגיה", "פנימית ו", "פנימית ט", "אונקולוגית", "פנימית א", "פנימית ד", "פנימית ג", "שרות שיקום מרחוק תנועה"],
     }
-    #update_column_with_values(data, 'readmission-admitting department', words_dict_9, default_value="Other", empty_value="0")
+    update_column_with_values(data, 'readmission-admitting department', words_dict_9, default_value="Other", empty_value="0")
 
 
     #*עמודה - בשם epidural-anesthesia type
@@ -2038,7 +2057,7 @@ def main():
     words_dict_14 = {
         "1": ["FIBRILLAR"],
         "2": ["NU_KNIT"],
-        "3": ["DETAIL_2","DiagnosisTest","Hemostasis","LyingDown","Text_1", "Sergiplo"]
+        "3": ["SURGICEL"]
     }
     update_column_with_values(data, 'hemostasis-code', words_dict_14, default_value="Other", empty_value="0")
     
@@ -2055,6 +2074,26 @@ def main():
         "2": ["הכנסת פרופס"]
     }
     update_column_with_values(data, 'balloon/propes-measurement', words_dict_16, default_value="Other", empty_value="0")
+    
+    #זיהום לאחר לידה
+    words_dict_17 = {
+        "1": ["pyelonephritis", "urinary", "uti"],
+        "2": ["sepsis"],
+        "3": ["pneumonia", "enchephalitis"],
+        "4": ["wound", "cellulitis"],
+        "5": ["mastitis"]
+    }
+    update_column_with_values(data, 'maternal infection post partum-diagnosis', words_dict_17, default_value="Other", empty_value="0")
+    
+    #סיבוכים ניתוחיים - לעדכן מילון אחרי שיחה עם יונתן
+    #words_dict_18 = {
+      #  "1": ["pyelonephritis", "urinary", "uti"],
+      #  "2": ["sepsis"],
+      #  "3": ["pneumonia", "enchephalitis"],
+      #  "4": ["wound", "cellulitis"],
+      #  "5": ["mastitis"]
+    #}
+    #update_column_with_values(data, 'original culumn name', words_dict_18, default_value="Other", empty_value="0")
     
     ## Remove negative values from 
     #cleared = clear_negative_values(data, '')
@@ -2104,6 +2143,8 @@ def main():
     data = is_empty(data, 'maternal vte_before delivery-diagnosis', 'maternal vte_before_delivery_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal infection post partum-diagnosis', 'maternal_infection_post_partum_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'hospitalization before delivery (hrp) - admission date', 'HRP_hospitalization_prepartum_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'hospitalization after delivery_other-hospitalization after delivery - admitting department
+', 'other_hospitalization_postpartum_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'pprom diagnosis-date of documentation', 'PPROM_yes_or_no', value_empty=0, value_not_empty=1)
     
   
@@ -2153,7 +2194,7 @@ def main():
     )
 
     data = categorize_packed_cells(data, 'packed cells before-date administered-days from reference_1', 'packed cells after-date administered-days from reference_1', step=2, 
-                               num_before_batches=5, num_after_batches=3, 
+                               num_before_batches=3, num_after_batches=13, 
                                result_received='packed_cells_received_yes_or_no', 
                                result_before='packed_cells_before_count', 
                                result_after='packed_cells_after_count')
@@ -2242,31 +2283,31 @@ def main():
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פקקת", "טרומבוזיס", "טרומבוסיס", "OVT"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא", "בשאלה"],
-                            result_col="Imaging_OVT_YESNO",
-                            snippet_col="Imaging_OVT_YESNO_Reason"
+                            result_col="Imaging_OVT_Yes_No",
+                            snippet_col="Imaging_OVT_Yes_No_Reason"
     )
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פגיעה במעי"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
-                            result_col="Imaging_Intestin_YESNO",
-                            snippet_col="Imaging_Intestin_YESNO_Reason"
+                            result_col="Imaging_Intestine_Yes_No",
+                            snippet_col="Imaging_Intestine_Yes_No_Reason"
     )
 
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פגיעה באורטר"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
-                            result_col="Imaging_Oreter_YESNO",
-                            snippet_col="Imaging_Oreter_YESNO_Reason"
+                            result_col="Imaging_ureter_Yes_No",
+                            snippet_col="Imaging_ureter_Yes_No_Reason"
     )
 
     data = flag_infectious_indication_from_free_text(data,
                             column_name="Singled_imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["אפנדציטיס", "אפנדציט"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
-                            result_col="Imaging_Appendicit_YESNO",
-                            snippet_col="Imaging_Appendicit_YESNO_Reason"
+                            result_col="Imaging_Appendicitis_Yes_No",
+                            snippet_col="Imaging_Appendicitis_Yes_No_Reason"
     )
 
 
@@ -2338,41 +2379,63 @@ def main():
         antibiotic_time_offset=-2,
         antibiotic_step=3,
         antibiotic_batches=108,
-        result_col="antibiotic_change_due_to_growth",
-        debug_col="antibiotic_change_due_to_growth_debug"
+        result_col="antibiotic_change_due_to_blood_growth",
+        debug_col="antibiotic_change_due_to_blood_growth_debug"
+    )
+    
+    data = flag_antibiotic_change_due_to_growth(
+        data=data,
+        culture_time_col="other cultures-collection date-days from reference_1",
+        organism_offset=1,
+        culture_step=3,
+        culture_batches=13,
+        antibiotic_name_col="antibiotics-medication_1",
+        antibiotic_time_offset=-2,
+        antibiotic_step=3,
+        antibiotic_batches=108,
+        result_col="antibiotic_change_due_to_other_growth",
+        debug_col="antibiotic_change_due_to_other_growth_debug"
     )
 
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
-    #    'reference occurrence number',
-    #    'date of birth~date of death - days from delivery',
-    #    'date of first documentation - birth occurence~imaging_ first cti/usi-interpretation',
-    #    'amniofusion-date of measurement-days from reference',
-    #    'cs info-date of documentation~cs info-remarks',
-    #    'scrub-value textual~surgery reports-documenting date',
-    #    'surgery reports-complications during surgery',
-    #    'full dilation at surgery-value numeric~surgery info-date of procedure',
-    #    'hospitalization before delivery (hrp) - admission date~length of stay delivery room-room exit - hours from reference_5',
-    #    'transfer to icu-department admission date~transfer to icu-department discharge date',
-    #    'readmission-hospital admission date',
-    #    'readmission-hospital discharge date',
-    #    'second stage timeline-time of full dilation',
-    #    'fever_max 38-43 before delivery-date of measurement',
-    #    'count of fever over 38-date of measurement_1~count of fever over 38-department_130',
-    #    'fever_max 38-43 after delivery-date of measurement',
-    #    'pprom diagnosis-date of documentation',
-    #    'pprom diagnosis-diagnosis',
-    #    'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal infection post partum-diagnosis',
-    #    'blood cultures-organism detected_1~organisms susceptability-susceptibility value_206',
-    #    'antibiotics-date administered-days from reference_1~antibiotics-medication_108',
+        'reference occurrence number',
+        'date of birth~date of death - days from delivery',
+    #    'date of first documentation - birth occurence',
+        'has imaging (first ct/cti)-exam start time-days from reference~imaging_ct/cti (first 10)-performed procedures_6',
+        'amniofusion-date of measurement-days from reference',
+        'cs info-date of documentation~cs info-remarks',
+        'scrub-value textual~surgery reports-documenting date',
+    #    'packed cells before-date administered-days from reference_1~packed cells after-medication_13',
+        'uterotonics-date administered-days from reference_1~uterotonics-medication_2',
+        'surgery time-surgery start date time~surgery reports-surgery date-hours from reference',
+        'surgery reports-complications during surgery-surgery reports-disinfection',
+        'full dilation at surgery-value numeric~surgery info-date of procedure',
+        'hospitalization before delivery (hrp) - admission date',
+        'hospitalization before delivery (hrp) - discharge date',
+        'hospitalization before delivery (hrp) - discharge date~hospitalization after delivery - admission date',
+        'hospitalization after delivery - discharge date~hospitalization after delivery_other-hospitalization after delivery - admission date',
+        'hospitalization after delivery_other-hospitalization after delivery - discharge date~length of stay delivery room-room exit - hours from reference_5',
+        'transfer to icu-department admission date~transfer to icu-department discharge date',
+        'readmission-hospital admission date',
+        'readmission-hospital discharge date-days from reference~readmission-hospital discharge date',
+        'second stage timeline-time of full dilation',
+        'fever_max 38-43 before delivery-date of measurement',
+        'count of fever over 38-date of measurement_1~count of fever over 38-department_131',
+        'fever_max 38-43 after delivery-date of measurement',
+        'pprom diagnosis-date of documentation',
+        'pprom diagnosis-diagnosis',
+        'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal pph-diagnosis',
+        'crp at 1st imaging 24h-collection date-hours from reference',
+        'plt at 1st imaging 24h-collection date-hours from reference',
+        'wbc at 1st imaging 24h-collection date-hours from reference',
+        'crp (first 50)-collection date-days from reference_1~wbc (first 50)-numeric result_50',
+        'blood cultures-organism detected_1~organisms susceptability-susceptibility value_206',
+        'antibiotics-date administered-days from reference_1~antibiotics-medication_108',
     #    'gbs status-gbs in urine~gbs status-gbs vagina',
   
-    #    'wbc max-collection date-hours from reference',
-    #    'crp max-collection date-hours from reference',
-    #    'surgery after delivery-department_1~surgery after delivery-department_2',
-    #    'imaging-exam performed (sps)_1~imaging-performed procedures_7'
-         ])
+     ])
 
     save_data (data, 'output.csv')
 
