@@ -1647,6 +1647,46 @@ def flag_antibiotic_change_due_to_growth(
     return data
 
 
+def concatenate_unique_batches_by_column(data, start_col, step_size, num_batches, element_position, result_col):
+    """
+    For each row:
+    - Extracts full batches (step_size cols, repeated num_batches times)
+    - Deduplicates full batches
+    - Extracts the element at position `element_position` (1-based) from each unique batch
+    - Joins those values with commas into result_col
+    """
+    start_idx = column_name_to_index(data, start_col)
+
+    def process_row(row):
+        seen_batches = set()
+        extracted_values = []
+
+        for i in range(num_batches):
+            batch = []
+            for j in range(step_size):
+                try:
+                    val = row.iloc[start_idx + i * step_size + j]
+                except:
+                    val = ""
+                batch.append(str(val).strip())
+
+            batch_tuple = tuple(batch)
+            if all(x == "" for x in batch_tuple):
+                continue
+
+            if batch_tuple not in seen_batches:
+                seen_batches.add(batch_tuple)
+                try:
+                    extracted_value = batch_tuple[element_position - 1]
+                    if extracted_value != "":
+                        extracted_values.append(extracted_value)
+                except IndexError:
+                    continue
+
+        return ", ".join(extracted_values)
+
+    data[result_col] = data.apply(process_row, axis=1)
+    return data
 
 
 organism_dict = {
@@ -2394,6 +2434,15 @@ def main():
         antibiotic_batches=108,
         result_col="antibiotic_change_due_to_other_growth",
         debug_col="antibiotic_change_due_to_other_growth_debug"
+    )
+
+    data = concatenate_unique_batches_by_column(
+        data=data,
+        start_col="antibiotics-medication_1",
+        step_size=4,
+        num_batches=30,
+        element_position=1,  # gets the 1st, 2ndd, 3rd column in each batch,
+        result_col="concat_unique_antibiotic_names"
     )
 
 
