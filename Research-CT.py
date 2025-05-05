@@ -29,6 +29,20 @@ def column_name_to_index(data, column_name):
     else:
         raise KeyError(f"Column '{column_name}' not found in the DataFrame.")
 
+def add_row_index_column(data, col_name="Index", first_position=True):
+    """
+    Adds a 1-based row index column to the DataFrame.
+    If first_position is True, inserts it as the first column.
+    """
+    indexed = data.copy()
+    indexed[col_name] = range(1, len(indexed) + 1)
+    
+    if first_position:
+        cols = [col_name] + [col for col in indexed.columns if col != col_name]
+        indexed = indexed[cols]
+    
+    return indexed
+
 def update_dataframe(originalData, col1, words1, logical_op, col2, words2, col3, step_size, num_steps, col3_empty, result_column_name, return_values=True, unique=False, dictionary=None, limitResults=None):    
     data = originalData.copy()
     # Prepare column indices
@@ -2501,8 +2515,8 @@ def main():
     #    'gbs status-gbs in urine~gbs status-gbs vagina',
   
      ])
-
-    save_data (data, 'output.csv')
+    data = add_row_index_column(data)
+    save_data(data, 'output.csv')
 
 if __name__ == "__main__":
     main()
