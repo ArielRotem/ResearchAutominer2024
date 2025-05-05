@@ -1363,16 +1363,18 @@ def extract_sentences_containing_words(data, column_name, keywords, negation_pre
     return data
 
 
-def split_rows_by_non_empty_batches(data, batch_start_col, step_size, num_batches, columns_per_batch, prefix):
+def split_rows_by_non_empty_batches(data, batch_start_col, step_size, num_batches, columns_per_batch, prefix, batch_index_col="CT_Number"):
     """
     Explodes rows by non-empty column batches, using original column names (minus _1/_2 etc.) with a prefix.
     Each new row keeps original data + one batch copied into standardized renamed columns.
+    Adds a running 1-based index in batch_index_col. If no batches found, index is 0.
     """
     start_idx = column_name_to_index(data, batch_start_col)
     result_rows = []
 
     for _, row in data.iterrows():
         base_row = row.to_dict()
+        row_split_count = 0  # ✅ added counter
 
         for batch in range(num_batches):
             batch_indices = [start_idx + batch * step_size + offset for offset in range(columns_per_batch)]
@@ -1380,16 +1382,22 @@ def split_rows_by_non_empty_batches(data, batch_start_col, step_size, num_batche
             if not any(pd.notna(row.iloc[idx]) and str(row.iloc[idx]).strip() != '' for idx in batch_indices):
                 continue
 
+            row_split_count += 1  # ✅ increment on each split
             new_row = base_row.copy()
 
             for idx in batch_indices:
                 orig_col_name = data.columns[idx]
-                # Remove trailing _# or digit at the end
                 base_name = re.sub(r'[_ ]?\d+$', '', orig_col_name)
                 new_col_name = f"{prefix}{base_name}"
                 new_row[new_col_name] = row.iloc[idx]
 
+            new_row[batch_index_col] = row_split_count  # ✅ attach batch index
             result_rows.append(new_row)
+
+        # If no non-empty batch was found, return base row with batch ID = 0
+        if row_split_count == 0:
+            base_row[batch_index_col] = 0
+            result_rows.append(base_row)
 
     return pd.DataFrame(result_rows)
 
