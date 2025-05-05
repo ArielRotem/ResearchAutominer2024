@@ -1865,10 +1865,6 @@ def main():
     ## blood culture positive != bateremia so this column is not relevent for now
     ##data = containswords_andor_containswords_and_nonempty_result_exists(data, '', ['דם'], 'OR','', ['דם'], '', 8, 74, 'blood_culture_positive')
 
-
-    ## other cultures taken yes/no
-    data = containswords_result_exists(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה,'שיליה], 3, 13, 'other_culture_taken')
-
     ## blood cultures positive organisms followed by Categories
     data = containswords_and_nonempty_result_values(data, 'blood cultures-test type_1', ['דם'], 'blood cultures-organism detected_1', 4, 40, 'blood_culture_organisms')
     data = containswords_and_nonempty_result_values(data, 'blood cultures-test type_1', ['דם'], 'blood cultures-organism detected_1', 4, 40, 'blood_culture_organisms_category', dictionary=organism_dict)
@@ -1886,8 +1882,12 @@ def main():
     data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
     
      ## other cultures positive organisms followed by Categories
-    data = containswords_and_nonempty_result_values(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה,'שיליה], 3, 13, 'other_culture__organisms')
-    data = containswords_and_nonempty_result_values(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה,'שיליה], 3, 13, 'other_culture_organisms_category', dictionary=organism_dict)
+    data = containswords_and_nonempty_result_values(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה','שיליה'],'other cultures-specimen material_1', 3, 13, 'other_culture__organisms')
+    data = containswords_and_nonempty_result_values(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה','שיליה'],'other cultures-specimen material_1', 3, 13, 'other_culture_organisms_category', dictionary=organism_dict)
+    
+     ## other cultures taken yes/no
+    data = containswords_result_exists(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה','שיליה'], 3, 13, 'other_culture_taken')
+
     
     data = remove_contaminant_and_count(data, 'other_culture_organisms_category', 'other_culture_Type_of_growth', delimiter=',', default_value=0, contaminant='Contaminants (CONS etc.)')
     data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
@@ -2078,8 +2078,8 @@ def main():
     #זיהום לאחר לידה
     words_dict_17 = {
         "1": ["pyelonephritis", "urinary", "uti"],
-        "2": ["sepsis"],
-        "3": ["pneumonia", "enchephalitis"],
+        "2": ["sepsis", "septic shock"],
+        "3": ["pneumonia", "encephalitis"],
         "4": ["wound", "cellulitis"],
         "5": ["mastitis"]
     }
@@ -2143,8 +2143,7 @@ def main():
     data = is_empty(data, 'maternal vte_before delivery-diagnosis', 'maternal vte_before_delivery_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal infection post partum-diagnosis', 'maternal_infection_post_partum_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'hospitalization before delivery (hrp) - admission date', 'HRP_hospitalization_prepartum_yes_or_no', value_empty=0, value_not_empty=1)
-    data = is_empty(data, 'hospitalization after delivery_other-hospitalization after delivery - admitting department
-', 'other_hospitalization_postpartum_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'hospitalization after delivery_other-hospitalization after delivery - admitting department', 'other_hospitalization_postpartum_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'pprom diagnosis-date of documentation', 'PPROM_yes_or_no', value_empty=0, value_not_empty=1)
     
   
@@ -2410,7 +2409,7 @@ def main():
     #    'packed cells before-date administered-days from reference_1~packed cells after-medication_13',
         'uterotonics-date administered-days from reference_1~uterotonics-medication_2',
         'surgery time-surgery start date time~surgery reports-surgery date-hours from reference',
-        'surgery reports-complications during surgery-surgery reports-disinfection',
+        'surgery reports-complications during surgery~surgery reports-disinfection',
         'full dilation at surgery-value numeric~surgery info-date of procedure',
         'hospitalization before delivery (hrp) - admission date',
         'hospitalization before delivery (hrp) - discharge date',
@@ -2422,7 +2421,7 @@ def main():
         'readmission-hospital discharge date-days from reference~readmission-hospital discharge date',
         'second stage timeline-time of full dilation',
         'fever_max 38-43 before delivery-date of measurement',
-        'count of fever over 38-date of measurement_1~count of fever over 38-department_131',
+        'count of fever over 38-date of measurement_1~count of fever over 38-department_130',
         'fever_max 38-43 after delivery-date of measurement',
         'pprom diagnosis-date of documentation',
         'pprom diagnosis-diagnosis',
