@@ -1647,18 +1647,18 @@ def flag_antibiotic_change_due_to_growth(
     return data
 
 
-def concatenate_unique_batches_by_column(data, start_col, step_size, num_batches, element_position, result_col):
+def concatenate_unique_batches_by_column(data, start_col, step_size, num_batches, element_position, result_col, dedup_columns=None):
     """
     For each row:
-    - Extracts full batches (step_size cols, repeated num_batches times)
-    - Deduplicates full batches
-    - Extracts the element at position `element_position` (1-based) from each unique batch
-    - Joins those values with commas into result_col
+    - Extracts all batch tuples (step_size columns, repeated num_batches times)
+    - Deduplicates based on either full batch or selected columns (1-based positions in dedup_columns)
+    - From each unique batch, extracts the element at element_position (1-based)
+    - Joins those values into result_col, comma-separated
     """
     start_idx = column_name_to_index(data, start_col)
 
     def process_row(row):
-        seen_batches = set()
+        seen_keys = set()
         extracted_values = []
 
         for i in range(num_batches):
@@ -1670,14 +1670,22 @@ def concatenate_unique_batches_by_column(data, start_col, step_size, num_batches
                     val = ""
                 batch.append(str(val).strip())
 
-            batch_tuple = tuple(batch)
-            if all(x == "" for x in batch_tuple):
+            if all(x == "" for x in batch):
                 continue
 
-            if batch_tuple not in seen_batches:
-                seen_batches.add(batch_tuple)
+            # Choose what to use for deduplication
+            if dedup_columns:
                 try:
-                    extracted_value = batch_tuple[element_position - 1]
+                    key = tuple(batch[pos - 1] for pos in dedup_columns)
+                except IndexError:
+                    continue
+            else:
+                key = tuple(batch)
+
+            if key not in seen_keys:
+                seen_keys.add(key)
+                try:
+                    extracted_value = batch[element_position - 1]
                     if extracted_value != "":
                         extracted_values.append(extracted_value)
                 except IndexError:
@@ -2442,7 +2450,8 @@ def main():
         step_size=4,
         num_batches=30,
         element_position=1,  # gets the 1st, 2ndd, 3rd column in each batch,
-        result_col="concat_unique_antibiotic_names"
+        result_col="concat_unique_antibiotic_names",
+        dedup_columns=[1, 3, 4]  # deduplicate based on 1st, 3rd, and 4th columns only
     )
 
 
