@@ -42,7 +42,7 @@ def add_row_index_column(data, col_name="Index", first_position=True):
         indexed = indexed[cols]
     
     return indexed
-
+    
 def update_dataframe(originalData, col1, words1, logical_op, col2, words2, col3, step_size, num_steps, col3_empty, result_column_name, return_values=True, unique=False, dictionary=None, limitResults=None):    
     data = originalData.copy()
     # Prepare column indices
@@ -1274,6 +1274,56 @@ def process_other_cultures(data, collection_date_col, organism_col, specimen_col
     return data
 
 
+def create_indicator_column_by_keyword(data, source_column, keyword, new_column):
+    data[new_column] = data[source_column].apply(
+        lambda x: 1 if isinstance(x, str) and keyword in x else 0
+    )
+    return data
+
+def extract_organism_name_column(data, source_column, target_column, keyword):
+    def extract_if_match(value):
+        if isinstance(value, str) and keyword in value:
+            return extract_organism_name(value)  # Reuses your existing function
+        return ""
+    
+    data[target_column] = data[source_column].apply(extract_if_match)
+    return data
+
+def extract_organism_name(text):
+    # Example logic: extract everything after ':' if it exists
+    if isinstance(text, str) and ':' in text:
+        return text.split(':', 1)[-1].strip()
+    return text  # or return "" if you want blank when no organism is found
+
+def extract_column_value_by_keyword(data, source_column, keyword, target_column, extraction_function=None):
+    def extract_value(cell):
+        if pd.notna(cell) and keyword in str(cell):
+            return extraction_function(cell) if extraction_function else cell
+        return ""
+    data[target_column] = data[source_column].apply(extract_value)
+    return data
+
+def extract_organism_name(text):
+    if pd.isnull(text):
+        return ""
+    # Assume organism name appears after ':' and before ',' or end of string
+    match = re.search(r':\s*([^,]+)', text)
+    if match:
+        return match.group(1).strip()
+    return text.strip()  # fallback
+
+def classify_growth_type(text):
+    if pd.isnull(text):
+        return ""
+    text = str(text).lower()
+    if "no growth" in text or "contaminant" in text:
+        return 0
+    elif "multiple" in text:
+        return 2
+    else:
+        return 1
+
+
 def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, num_steps, keywords, result_col_name):
     """
     Flags rows where imaging-guided drainage was performed based on:
@@ -1414,6 +1464,7 @@ def split_rows_by_non_empty_batches(data, batch_start_col, step_size, num_batche
             result_rows.append(base_row)
 
     return pd.DataFrame(result_rows)
+
 
 
 def check_disinfection_components(data, text_col, scrub_raw_data_col, backup_col, result_col, keyword_dict):
@@ -1718,6 +1769,106 @@ def concatenate_unique_batches_by_column(data, start_col, step_size, num_batches
     data[result_col] = data.apply(process_row, axis=1)
     return data
 
+def sum_two_columns_threshold(data, col1_name, col2_name, new_column_name, threshold, above_value=1, below_value=0, default_value=""):
+    """
+    Creates a new column where the value is:
+    - above_value if col1 + col2 >= threshold
+    - below_value if col1 + col2 < threshold
+    - default_value if either is missing or non-numeric
+
+    Args:
+    - data (pd.DataFrame): The input DataFrame
+    - col1_name, col2_name: Names of the columns to sum
+    - new_column_name: Name of the new result column
+    - threshold: Numeric cutoff for the sum
+    - above_value, below_value: Values to assign based on threshold
+    - default_value: Value if either input is invalid
+
+    Returns:
+    - pd.DataFrame: With the new column added
+    """
+    idx1 = column_name_to_index(data, col1_name)
+    idx2 = column_name_to_index(data, col2_name)
+
+    def compute(row):
+        try:
+            val1 = float(row.iloc[idx1])
+            val2 = float(row.iloc[idx2])
+            return above_value if (val1 + val2) >= threshold else below_value
+        except:
+            return default_value
+
+    data[new_column_name] = data.apply(compute, axis=1)
+    #print(f"Column '{new_column_name}' created from sum of '{col1_name}' and '{col2_name}'")
+    return data
+
+
+
+def split_gestational_age(data, column_name='gestational age', week_col='gestational_week', day_col='gestational_day'):
+    """
+    Splits a gestational age column in dot-decimal format (e.g., 38.5 means 38 weeks + 5 days)
+    into two new columns: gestational_week and gestational_day.
+
+    Args:
+    data (pd.DataFrame): The input DataFrame.
+    column_name (str): Name of the column with gestational age in week.day format.
+    week_col (str): Name for the new weeks column.
+    day_col (str): Name for the new days column.
+
+    Returns:
+    pd.DataFrame: The modified DataFrame with two new columns.
+    """
+    column_index = column_name_to_index(data, column_name)
+
+    def extract_week(x):
+        try:
+            return int(float(x))
+        except:
+            return ""
+
+    def extract_day(x):
+        try:
+            # Get the digits after the decimal point, then round just in case of 38.1999
+            return int(round((float(x) - int(float(x))) * 10))
+        except:
+            return ""
+
+    data[week_col] = data.iloc[:, column_index].apply(extract_week)
+    data[day_col] = data.iloc[:, column_index].apply(extract_day)
+
+    print(f"Added columns: {week_col}, {day_col}")
+    return data
+
+
+
+def create_column_from_value_map(data, source_column, new_column, value_map, default_value=""):
+    """
+    Creates a new column based on mapping specific values from an existing column.
+
+    Args:
+    - data (pd.DataFrame): The input DataFrame.
+    - source_column (str): The name of the column to base the mapping on.
+    - new_column (str): The name of the new column to create.
+    - value_map (dict): A dictionary mapping source values (as strings or numbers) to new values.
+    - default_value (any): The value to assign if no match is found (default: empty string).
+
+    Returns:
+    - pd.DataFrame: The DataFrame with the new column added.
+    """
+    col_index = column_name_to_index(data, source_column)
+
+    def map_value(x):
+        try:
+            x_numeric = int(float(x))
+            return value_map.get(x_numeric, default_value)
+        except:
+            return default_value
+
+    data[new_column] = data.iloc[:, col_index].apply(map_value)
+    print(f"Column '{new_column}' created from '{source_column}' using value map.")
+    return data
+
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -1940,36 +2091,38 @@ def main():
     data = containswords_and_nonempty_result_values(data, 'blood cultures-test type_1', ['דם'], 'blood cultures-organism detected_1', 4, 40, 'blood_culture_organisms_category', dictionary=organism_dict)
     
     data = remove_contaminant_and_count(data, 'blood_culture_organisms_category', 'Blood_culture_Type_of_growth', delimiter=',', default_value=0, contaminant='Contaminants (CONS etc.)')
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_Organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
-    
-     ## other cultures positive organisms followed by Categories
-    data = containswords_and_nonempty_result_values(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה','שיליה'],'other cultures-specimen material_1', 3, 13, 'other_culture__organisms')
-    data = containswords_and_nonempty_result_values(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה','שיליה'],'other cultures-specimen material_1', 3, 13, 'other_culture_organisms_category', dictionary=organism_dict)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
     
      ## other cultures taken yes/no
     data = containswords_result_exists(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה','שיליה'], 3, 13, 'other_culture_taken')
 
+     # Apply culture extraction processing.
+    data = process_other_cultures(data, 'other cultures-collection date-days from reference_1', 'other cultures-organism detected_1', 'other cultures-specimen material_1', 
+                                      step=3, num_batches=10, result_samples='other_culture_samples_taken', 
+                                      result_organisms='other_culture_organisms_detected',
+                                      result_organism_categories='other_culture_organisms_category',
+                                      organism_translation_dict=organism_dict)
     
     data = remove_contaminant_and_count(data, 'other_culture_organisms_category', 'other_culture_Type_of_growth', delimiter=',', default_value=0, contaminant='Contaminants (CONS etc.)')
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_Organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
     
     ## Antibiotics taken yes/no
     data = containswords_result_exists(data, 'antibiotics-medication_1', ['AMPICILLIN'], 3, 108, 'Antibiotics_given_Ampicillin')
@@ -1983,7 +2136,22 @@ def main():
     data = containswords_result_exists(data, 'antibiotics-medication_1', ['TAZOCIN', 'TAZOBACTAM+PIPERACILLIN'], 3, 108, 'Antibiotics_given_Tazocin')
     data = containswords_result_exists(data, 'antibiotics-medication_1', ['AZENIL', 'NITROFURANTOIN', 'DOXYLIN','AMIKACIN'], 3, 108, 'Antibiotics_given_Other')
 
-    ## Antibiotics length of treatment
+    data = create_column_from_value_map(data,source_column= 'fetus count', new_column='Multifetal pregnancy_yes_or_no',value_map={1: 0, 2: 1, 3: 1},default_value=""
+    )
+    
+    #create NVD yes/no and CS yes/no columns based on CS indication
+    data = is_empty(data, column_name='cs info-main indication', new_column_name='NVD_yes_or_no', value_empty=1, value_not_empty=0)
+    data = is_empty(data, column_name='cs info-main indication', new_column_name='CS_yes_or_no', value_empty=0, value_not_empty=1)
+
+    #create surgical complications yes/no column
+    data = is_empty(data, column_name='surgical complications-procedure', new_column_name='surgical_complication_yes_or_no', value_empty=0, value_not_empty=1)
+    
+    #create Intrapartum fever yes/no column
+    data = is_empty(data, column_name='fever_max 38-43 before delivery-numeric result', new_column_name='Intrapartum_fever_yes_or_no', value_empty=0, value_not_empty=1)
+
+    #create Postpartum fever yes/no column
+    data = is_empty(data, column_name= 'fever_max 38-43 after delivery-numeric result', new_column_name= 'Postpartum_fever_yes_or_no', value_empty=0, value_not_empty=1)
+   
 
     ## Dictionary mapping
     #*עמודה - בשם type of labor onset
@@ -1997,6 +2165,13 @@ def main():
     }
     update_column_with_values(data, 'type of labor onset', words_dict_0, default_value="Other")
 
+    #create Yes/no columns
+    data = compare_values(data, column_name='type of labor onset', new_column_name='Spontaneous_delivery_yes/no',
+                               target_value=1,
+                               match_return=1, 
+                               no_match_return=0)
+
+
     #*עמודה - בשם complications
     words_dict_1 = {
         "0": ["לא"],
@@ -2006,7 +2181,7 @@ def main():
     
     #*עמודה - בשם amniofusion-non-numeric results
     words_dict_2 = {
-        "1": ["בוצע", "בוצע עי דר הראל"]
+        "1": ["בוצע", "בוצע עי דר הראל", "הוכנס על ידי דר ברט"]
     }
     update_column_with_values(data, 'amniofusion-non-numeric result', words_dict_2, default_value="Other", empty_value="0")
 
@@ -2024,14 +2199,25 @@ def main():
     
       #*עמודה - בשם surgery info-procedure
     words_dict_4 = {
-        "1": ["LSCS","LOW SEGMENT CESAREAN SECTION","CESAREAN DELIVERY L.S.C.S", "CESAREAN SECTION"],
-        "2": ["HIGH TRANSVERSE CESAREAN SECTION"],
+        "2": ["HIGH TRANSVERSE"],
         "3": ["CESAREAN HYSTERECTOMY", "CESAREAN DELIVERY AND HYSTERECTOMY"],
         "4": ["CLASSICAL"],
-        "5": ["INVERTED T INCISION "]
+        "5": ["INVERTED T INCISION "],
+        "1": ["LSCS","LOW SEGMENT","CESAREAN DELIVERY L.S.C.S", "CESAREAN SECTION"]
     }
     
     update_column_with_values(data, 'surgery info-procedure', words_dict_4, default_value="Other", empty_value="")
+    
+    #create yes/no column
+    data = compare_values(
+    data,
+    column_name='surgery info-procedure',
+    new_column_name='Cesarean_Hysterectomy yes/no',
+    target_value=3,
+    match_return=1,
+    no_match_return=0
+    )
+
     
     #*עמודה - בשם amniotic fluid color
     words_dict_5 = {
@@ -2067,8 +2253,7 @@ def main():
 
     #*עמודה - בשם Transfer to ICU
     words_dict_8 = {
-        "1": ["טיפול נמרץ כללי"],
-        "2": ["יחידת טראומה"]
+        "1": ["טיפול נמרץ כללי", "יחידת טראומה"]
     }
     update_column_with_values(data, 'transfer to icu-department', words_dict_8, default_value="Other", empty_value="0")
 
@@ -2103,13 +2288,25 @@ def main():
     
     #עמודה בשם cs info-type of surgery
     words_dict_12 = {
-        "1": ["אלקטיבי"],
-        "2": ["סמי-אלקטיבי"],
-        "3": ["דחוף"],
-        "4": ["בהול"]
+        "1": ["אלקטיבי","סמי-אלקטיבי"],
+        #"2": ["סמי-אלקטיבי"],
+        "3": ["דחוף", "בהול"],
+        #"4": ["בהול"]
         
     }
     update_column_with_values(data, 'cs info-type of surgery', words_dict_12, default_value="Other", empty_value="")
+    
+    #create yes/no column
+    data = compare_values(data, column_name='cs info-type of surgery', new_column_name='Elective_CS_yes/no',
+                               target_value=1,
+                               match_return=1,
+                               no_match_return=0)
+                               
+    data = compare_values(data, column_name='cs info-type of surgery', new_column_name='Urgent_CS_yes/no',
+                               target_value=3,
+                               match_return=1,
+                               no_match_return=0)
+                               
     
      #*עמודות YN,YR,YV,YZ - בשם Procedure
      #0-No or Hysterectomy, 1-Laparotomy, 2-Laparoscoy, 3-Other
@@ -2123,6 +2320,9 @@ def main():
     #update_column_with_values(data, 'surgery after delivery-procedure_1', words_dict_13, default_value="Other", empty_value="0")
     #update_column_with_values(data, 'surgery after delivery-procedure_2', words_dict_13, default_value="Other", empty_value="0")
 
+    #create hemostasis yes/no column
+    data = is_empty(data, column_name='hemostasis-code', new_column_name='hemostasis_yes/no', value_empty=0, value_not_empty=1)
+    
     #שימוש בהמוסטטים בניתוח
     words_dict_14 = {
         "1": ["FIBRILLAR"],
@@ -2131,12 +2331,16 @@ def main():
     }
     update_column_with_values(data, 'hemostasis-code', words_dict_14, default_value="Other", empty_value="0")
     
+     #create augmentation yes/no column
+    data = is_empty(data, column_name='augmentation meds-medication', new_column_name='augmentation_yes/no', value_empty=0, value_not_empty=1)
+    
     #אוגמנטציה
     words_dict_15 = {
         "1": ["MISOPROSTOL"],
         "2": ["OXYTOCIN"]
     }
     update_column_with_values(data, 'augmentation meds-medication', words_dict_15, default_value="Other", empty_value="0")
+    
     
     #בלון/פרופס
     words_dict_16 = {
@@ -2145,31 +2349,69 @@ def main():
     }
     update_column_with_values(data, 'balloon/propes-measurement', words_dict_16, default_value="Other", empty_value="0")
     
+    #create yes/no columns
+    data = compare_values(data, column_name='balloon/propes-measurement', new_column_name='Propes_induction_yes/no',
+                               target_value=2,
+                               match_return=1,
+                               no_match_return=0)
+    
+    data = compare_values(data, column_name='balloon/propes-measurement', new_column_name='Balloon_induction_yes/no',
+                               target_value=1,
+                               match_return=1,
+                               no_match_return=0)
+    
+    
     #זיהום לאחר לידה
     words_dict_17 = {
-        "1": ["pyelonephritis", "urinary", "uti"],
-        "2": ["sepsis", "septic shock"],
-        "3": ["pneumonia", "encephalitis"],
-        "4": ["wound", "cellulitis"],
-        "5": ["mastitis"]
+        "1": ["wound", "cellulitis"],
+        "2": ["pyelonephritis", "urinary", "uti"],
+        "3": ["mastitis"],
+        "4": ["sepsis", "septic", "shock"],
+        "5": ["pneumonia", "encephalitis", "meningitis"]
     }
     update_column_with_values(data, 'maternal infection post partum-diagnosis', words_dict_17, default_value="Other", empty_value="0")
     
-    #סיבוכים ניתוחיים - לעדכן מילון אחרי שיחה עם יונתן
-    #words_dict_18 = {
-      #  "1": ["pyelonephritis", "urinary", "uti"],
-      #  "2": ["sepsis"],
-      #  "3": ["pneumonia", "enchephalitis"],
-      #  "4": ["wound", "cellulitis"],
-      #  "5": ["mastitis"]
+    
+    # surgical complications
+    
+    data = clear_strings_multiple_columns(
+    data,
+    column_names=['surgical complications-procedure'],
+    words=['TRACHEOSTOMY', 'APPENDECTOMY', 'CHOLECYSTECTOMY', 'PERIANAL ABSCESS', 'EXAMINATION UNDER ANESTHESIA'],
+    indicator=0
+    )
+
+    
+    words_dict_18 = {
+      #GI
+      "1": ['colectomy', 'colostomy', 'enterolysis', 'PANCREATECTOMY', 'ileocolic'],
+      #soft tissue
+      "2": ['debridement', 'DEBRIDMENT'],
+      #Urinary
+      "3": ['cystoscopy', 'URETEROSCOPY', 'rirs', 'BLADDER', 'UROGRAPHY', 'URETEROSCOPY'],
+      #exploratory/diagnistic
+      "4": ['laparoscopy', 'laparotomy'],
+    }
+    update_column_with_values(data, 'surgical complications-procedure', words_dict_18, default_value="Other", empty_value="0")
+    
+    # other cultures samples taken
+    #words_dict_19 = {
+      #אבצס/מורסה
+      #"1": ["מורסה"],
+      #אבצס רקמות רכות
+      #"2": ["ניתוח"],
+      #שליה
+      #"3": ["שיליה", "שליה"],
+      #אחר
+      #"4": ["ביופסיה", "נוזל"],
     #}
-    #update_column_with_values(data, 'original culumn name', words_dict_18, default_value="Other", empty_value="0")
+    #update_column_with_values(data, 'other_culture_samples_taken', words_dict_19, default_value="Other", empty_value="0")
+    
+
     
     ## Remove negative values from 
     #cleared = clear_negative_values(data, '')
     #print(f"{cleared} negative \"third stage length\" values removed")
-
-
 
     # Check if numeric values in column 'E' meet or exceed the cutoff of 1, if >= return above value, below return the below value. empty keep empty.
     #data = cutoff_number(data, 'date of death - days from delivery', 'death_at_delivery_yes_no', 1, above=0, below=1, empty_value=0)
@@ -2217,14 +2459,17 @@ def main():
     data = is_empty(data, 'pprom diagnosis-date of documentation', 'PPROM_yes_or_no', value_empty=0, value_not_empty=1)
     
   
-    # Check if numeric values in column 'AV' meet or exceed the cutoff of __, and add results in a new column '___'
+    # Check if numeric values in column 'rom hours from reference' meet or exceed the cutoff of __, and add results in a new column '___'
     data = cutoff_number(data, 'rom description-date of membranes rupture-hours from reference', 'duration_of_rom_over_18h', 18, above=1, below=0, empty_value='')
+    
+    # Check if numeric values in column 'gestational age' meet or exceed the cutoff of 37, and add results in a new column '___'
+    data = cutoff_number(data, 'gestational age', 'preterm_labor_yes_or_no', 37, above=0, below=1, empty_value='')
+    
+    # Check if numeric values in column 'hospitalization before delivery (hrp) - length of stay (days)' meet or exceed the cutoff of 3, and add results in a new column '___'
+    data = cutoff_number(data, 'hospitalization before delivery (hrp) - length of stay (days)', 'Pre-labor_HRP_over_3d_yes_or_no', 3, above=1, below=0, empty_value='')
 
     # Flip the sign of numeric values in column 'BA'
     data = flip_sign(data, 'fever_max 38-43 before delivery-date of measurement-hours from reference')
-
-    ## CT 
-    
   
     # Remove values from column 'BL' if the value in column 'BI' is equal to 0.
     #data = clear_values_based_on_reference(data, 'transfers-department length of stay', reference_column_name='transfers-department', reference_value='0')
@@ -2255,12 +2500,12 @@ def main():
     )
 
     # Apply the function
-    data = extract_and_filter_raw_map(
-        data=data,
-        input_column="scrub-all row data",
-        substrings=["רחצה-", "חיטוי-", "Polydine"],
-        new_column_name="Filtered_Keys"
-    )
+ #    data = extract_and_filter_raw_map(
+      #   data=data,
+       #  input_column="scrub-all row data",
+       #  substrings=["רחצה-", "חיטוי-", "Polydine"],
+      #   new_column_name="Filtered_Keys"
+    # )
 
     data = categorize_packed_cells(data, 'packed cells before-date administered-days from reference_1', 'packed cells after-date administered-days from reference_1', step=2, 
                                num_before_batches=3, num_after_batches=13, 
@@ -2285,6 +2530,7 @@ def main():
     data = categorize_surgery_time(data, ['surgery time-surgery start date time', 'surgery time-documenting date','חדר ניתוח גניקולוגי שעת ניתוח-שעת ניתוח-value textual', 'surgery start-value textual'], 'surgery_time_category_label', 'surgery_time_category')
     data = calculate_duration(data, start_column="surgery start-value textual", end_column="surgery end-value textual", result_column="surgery_duration_hours")
 
+
     # Apply length of stay processing
     data = process_length_of_stay(data,
                               room_col='length of stay delivery room-department_1',
@@ -2303,14 +2549,7 @@ def main():
                                step=3,
                                num_batches=130,
                                result_col='fever_sequences')
-
-    # Apply culture extraction processing.
-    data = process_other_cultures(data, 'other cultures-collection date-days from reference_1', 'other cultures-organism detected_1', 'other cultures-specimen material_1', 
-                                      step=3, num_batches=10, result_samples='other_culture_samples_taken', 
-                                      result_organisms='other_culture_organisms_detected',
-                                      result_organism_categories='other_culture_categories_detected',
-                                      organism_translation_dict=organism_dict)
-
+    
 
     data = imaging_guided_drainage_detected(data,
                                                 static_col="imaging_ first cti/usi-performed procedures",
@@ -2318,9 +2557,11 @@ def main():
                                                 step_size=4,
                                                 num_steps=6,
                                                 keywords=["CTI", "USI", "ניקוז"],
-                                                result_col_name="Imaging_Guided_Drainage"
+                                                result_col_name="Imaging_Guided_Drainage yes/no"
     )
 
+    data = add_row_index_column(data, col_name="Patient_Index")
+    
     data_singled = split_rows_by_non_empty_batches(data,
                                                 batch_start_col="imaging_ct/cti (first 10)-exam start time-days from reference_1",
                                                 step_size=4,
@@ -2391,7 +2632,7 @@ def main():
         text_col="scrub-value textual",
         scrub_raw_data_col="scrub-all row data",
         backup_col="surgery reports-disinfection",
-        result_col="sufficient_disinfection",
+        result_col="sufficient_disinfection_yes/no",
         keyword_dict=keyword_dict
     )
 
@@ -2468,25 +2709,93 @@ def main():
 
     data = concatenate_unique_batches_by_column(
         data=data,
-        start_col="antibiotics-medication_1",
+        start_col="surgery after delivery-date of procedure-days from reference_1",
         step_size=4,
-        num_batches=30,
-        element_position=1,  # gets the 1st, 2ndd, 3rd column in each batch,
-        result_col="concat_unique_antibiotic_names",
-        dedup_columns=[1, 3, 4]  # deduplicate based on 1st, 3rd, and 4th columns only
+        num_batches=7,
+        element_position=3,  # gets the 1st, 2nd, 3rd column in each batch,
+        result_col="postpartum_surgeries_names",
+        dedup_columns=[1,2]  # deduplicate based on 1st, 3rd, and 4th columns only
     )
+
+
+    # ניתוחים לאחר הלידה
+    words_dict_20 = {
+      #hysterectomy
+      "1": ["hysterectomy"],
+      #drainage
+      "2": ["drainage"],
+      #GI and GU
+      "3": ["enterolysis", "colectomy", "adhesions"],
+      #exploratory/diagnistic
+      "4": ["Laparoscopy", "laparotomy"],
+      #soft tissue
+      "5": ["debridment", "DEBRIDEMENT"]
+    }
+    update_column_with_values(data, 'postpartum_surgeries_names', words_dict_20, default_value="Other", empty_value="")
+    
+    #create yes/no column
+    data = compare_values(
+    data,
+    column_name='postpartum_surgeries_names',
+    new_column_name='postpartum_hysterectomy yes/no',
+    target_value=1,
+    match_return=1,
+    no_match_return=0
+    )
+
+    #split estational age to week column and day column
+    data = split_gestational_age(data, column_name='gestational age')
+
+    #create multiple packed cells yes/no column
+    data = sum_two_columns_threshold(
+        data,
+        col1_name='packed_cells_before_count',
+        col2_name='packed_cells_after_count',
+        new_column_name='multiple packed cells (4 and above) yes/no',
+        threshold=4,
+        above_value=1,
+        below_value=0,
+        default_value=""
+    )
+
+   #abscess_cultures
+   # 1. Flag whether abscess culture was taken
+    data = create_indicator_column_by_keyword(data, 'other_culture_samples_taken', 'מורסה', 'abscess_culture_was_taken_yes_no')
+
+    # 2. Copy organism name, category, and growth type from existing 'other_culture_' columns where 'מורסה' is mentioned
+    data['abscess_culture_organism_name'] = data.apply(
+    lambda row: row['other_culture_organisms_detected'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+    )
+
+    data['abscess_culture_organism_category'] = data.apply(
+    lambda row: row['other_culture_organisms_category'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+    )
+
+    data['abscess_culture_type_of_growth'] = data.apply(
+    lambda row: row['other_culture_Type_of_growth'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+    )
+
+
+
 
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
         'reference occurrence number',
         'date of birth~date of death - days from delivery',
-    #    'date of first documentation - birth occurence',
-        'has imaging (first ct/cti)-exam start time-days from reference~imaging_ct/cti (first 10)-performed procedures_6',
+        'date of first documentation - birth occurence',
+        #'has imaging (first ct/cti)-exam start time-days from reference',
+        'fetus count',
+        'type of labor onset',
+        'gestational age',
+        'has imaging (first ct/cti)-exam start time-date~imaging_ct/cti (first 10)-performed procedures_6',
         'amniofusion-date of measurement-days from reference',
-        'cs info-date of documentation~cs info-remarks',
+        'hemostasis-value numeric',
+        'hemostasis-code',
+        'cs info-date of documentation~cs info-secondary indication',
+        'hospitalization before delivery (hrp) - length of stay (days)',
         'scrub-value textual~surgery reports-documenting date',
-    #    'packed cells before-date administered-days from reference_1~packed cells after-medication_13',
+        'packed cells before-date administered-days from reference_1~packed cells after-medication_13',
         'uterotonics-date administered-days from reference_1~uterotonics-medication_2',
         'surgery time-surgery start date time~surgery reports-surgery date-hours from reference',
         'surgery reports-complications during surgery~surgery reports-disinfection',
@@ -2512,11 +2821,15 @@ def main():
         'crp (first 50)-collection date-days from reference_1~wbc (first 50)-numeric result_50',
         'blood cultures-organism detected_1~organisms susceptability-susceptibility value_206',
         'antibiotics-date administered-days from reference_1~antibiotics-medication_108',
-    #    'gbs status-gbs in urine~gbs status-gbs vagina',
+        'surgery_time_category_label',
+        #'imaging_number-count',
+        'surgical complications-department~surgery after delivery-department_7',
+        #'gbs status-gbs in urine~gbs diagnosis-diagnosis'
   
      ])
-    data = add_row_index_column(data)
-    save_data(data, 'output.csv')
+    data = add_row_index_column(data, col_name="CT_Index")
+    
+    save_data (data, 'output.csv')
 
 if __name__ == "__main__":
     main()
