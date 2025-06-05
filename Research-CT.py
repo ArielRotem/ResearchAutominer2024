@@ -1355,6 +1355,11 @@ def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, 
     return data
 
 
+def flag_infectious_indication_from_free_text_batch(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5, partialMatch=False, batch=1):
+    for i in range(1, batch + 1):
+        data = flag_infectious_indication_from_free_text(data, f"{column_name}_{i}", infectious_phrases, negation_prefixes, f"{result_col}_{i}", f"{snippet_col}_{i}", context_window, partialMatch)
+    return data
+
 def flag_infectious_indication_from_free_text(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5, partialMatch=False):
     col_idx = column_name_to_index(data, column_name)
     infectious_phrases_split = [phrase.lower().split() for phrase in infectious_phrases]
@@ -1392,7 +1397,11 @@ def flag_infectious_indication_from_free_text(data, column_name, infectious_phra
     return data
 
 
-
+def extract_sentences_containing_words_batch(data, column_name, keywords, negation_prefixes, result_column_name, batch=1):
+    for i in range(1, batch + 1):
+        data = extract_sentences_containing_words(data, f"{column_name}_{i}", keywords, negation_prefixes, f"{result_column_name}_{i}")
+    return data
+    
 def extract_sentences_containing_words(data, column_name, keywords, negation_prefixes, result_column_name):
     """
     From each cell in a text column, extract dot-separated sentences that contain any keyword,
@@ -1523,6 +1532,21 @@ def check_disinfection_components(data, text_col, scrub_raw_data_col, backup_col
     return data
 
 
+
+def find_closest_lab_value_batch(data,start_col,step_size,num_batches,date_col_offset,ct_time_reference_col,max_gap_hours_before,result_col,max_gap_hours_after=None,batch=1):
+    for i in range(1, batch + 1):
+        data = find_closest_lab_value(
+            data,
+            start_col,
+            step_size,
+            num_batches,
+            date_col_offset,
+            f"{ct_time_reference_col}_{i}",
+            max_gap_hours_before,
+            f"{result_col}_{i}",
+            max_gap_hours_after
+        )
+    return data
 
 def find_closest_lab_value(
     data,
@@ -1867,6 +1891,7 @@ def create_column_from_value_map(data, source_column, new_column, value_map, def
     data[new_column] = data.iloc[:, col_index].apply(map_value)
     print(f"Column '{new_column}' created from '{source_column}' using value map.")
     return data
+
 
 
 
@@ -2562,62 +2587,68 @@ def main():
 
     data = add_row_index_column(data, col_name="Patient_Index")
     
-    data_singled = split_rows_by_non_empty_batches(data,
-                                                batch_start_col="imaging_ct/cti (first 10)-exam start time-days from reference_1",
-                                                step_size=4,
-                                                num_batches=6,
-                                                columns_per_batch=4,
-                                                prefix="Singled_"
-    )
-    print(len(data), " rows before splitting CTs, ", len(data_singled), " after.")
-    data = data_singled
+    ##data_singled = split_rows_by_non_empty_batches(data,
+    ##                                            batch_start_col="imaging_ct/cti (first 10)-exam start time-days from reference_1",
+    ##                                            step_size=4,
+    ##                                            num_batches=6,
+    ##                                            columns_per_batch=4,
+    ##                                            prefix="Singled_"
+    ##)
+    ##print(len(data), " rows before splitting CTs, ", len(data_singled), " after.")
+    ##data = data_singled
 
-    data = flag_infectious_indication_from_free_text(data,
-                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+    data = flag_infectious_indication_from_free_text_batch(data,
+                            column_name="imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["חום", "חומים", "פקקת", "דלקת", "אבצס", "אבסס", "מורסה", "קולקציה", "מזוהמת", "זיהום", "OVT", "abscess", "fever", "inflammation", "collection"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
-                            result_col="Imaging_Infectious_Reason",
-                            snippet_col="Infectious_Reason_Snippet",
-                            partialMatch=True
+                            result_col="Imaging_Infectious_Reason",  ## e.g. Imaging_Infectious_Reason_1, Imaging_Infectious_Reason_2 etc 
+                            snippet_col="Infectious_Reason_Snippet", ## e.g. Infectious_Reason_Snippet_1, Infectious_Reason_Snippet_2 etc
+                            partialMatch=True,
+                            batch=6
     )
 
 
-    data = extract_sentences_containing_words(data,
-                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+    data = extract_sentences_containing_words_batch(data,
+                            column_name="imaging_ct/cti (first 10)-interpretation",
                             keywords=["קולקציה"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
-                            result_column_name="Imaging_Collection_Sentences_Extracted"
+                            result_column_name="Imaging_Collection_Sentences_Extracted",
+                            batch=6
     )
 
-    data = flag_infectious_indication_from_free_text(data,
-                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+    data = flag_infectious_indication_from_free_text_batch(data,
+                            column_name="imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פקקת", "טרומבוזיס", "טרומבוסיס", "OVT"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא", "בשאלה"],
                             result_col="Imaging_OVT_Yes_No",
-                            snippet_col="Imaging_OVT_Yes_No_Reason"
+                            snippet_col="Imaging_OVT_Yes_No_Reason",
+                            batch=6
     )
-    data = flag_infectious_indication_from_free_text(data,
-                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+    data = flag_infectious_indication_from_free_text_batch(data,
+                            column_name="imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פגיעה במעי"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
                             result_col="Imaging_Intestine_Yes_No",
-                            snippet_col="Imaging_Intestine_Yes_No_Reason"
+                            snippet_col="Imaging_Intestine_Yes_No_Reason",
+                            batch=6
     )
 
-    data = flag_infectious_indication_from_free_text(data,
-                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+    data = flag_infectious_indication_from_free_text_batch(data,
+                            column_name="imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פגיעה באורטר"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
                             result_col="Imaging_ureter_Yes_No",
-                            snippet_col="Imaging_ureter_Yes_No_Reason"
+                            snippet_col="Imaging_ureter_Yes_No_Reason",
+                            batch=6
     )
 
-    data = flag_infectious_indication_from_free_text(data,
-                            column_name="Singled_imaging_ct/cti (first 10)-interpretation",
+    data = flag_infectious_indication_from_free_text_batch(data,
+                            column_name="imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["אפנדציטיס", "אפנדציט"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
                             result_col="Imaging_Appendicitis_Yes_No",
-                            snippet_col="Imaging_Appendicitis_Yes_No_Reason"
+                            snippet_col="Imaging_Appendicitis_Yes_No_Reason",
+                            batch=6
     )
 
 
@@ -2637,40 +2668,43 @@ def main():
     )
 
 
-    data = find_closest_lab_value(
+    data = find_closest_lab_value_batch(
         data=data,
         start_col="wbc (first 50)-numeric result_1",
         step_size=2,
         num_batches=15,
         date_col_offset=-1,
-        ct_time_reference_col="Singled_imaging_ct/cti (first 10)-exam start time-days from reference",
+        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
         max_gap_hours_before=24,
         result_col="closest_WBC",
-        max_gap_hours_after=12
+        max_gap_hours_after=12,
+        batch=6
     )
 
-    data = find_closest_lab_value(
+    data = find_closest_lab_value_batch(
         data=data,
         start_col="crp (first 50)-numeric result_1",
         step_size=2,
         num_batches=15,
         date_col_offset=-1,
-        ct_time_reference_col="Singled_imaging_ct/cti (first 10)-exam start time-days from reference",
+        ct_time_reference_col="=imaging_ct/cti (first 10)-exam start time-days from reference",
         max_gap_hours_before=24,
         result_col="closest_CRP",
-        max_gap_hours_after=12
+        max_gap_hours_after=12,
+        batch=6
     )
     
-    data = find_closest_lab_value(
+    data = find_closest_lab_value_batch(
         data=data,
         start_col="plt (first 50)-numeric result_1",
         step_size=2,
         num_batches=15,
         date_col_offset=-1,
-        ct_time_reference_col="Singled_imaging_ct/cti (first 10)-exam start time-days from reference",
+        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
         max_gap_hours_before=24,
         result_col="closest_PLT",
-        max_gap_hours_after=12
+        max_gap_hours_after=12,
+        batch=6
     )
     
     data = detect_multiple_antibiotics(
