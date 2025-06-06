@@ -1909,7 +1909,7 @@ def move_columns_to_end(data, start_col_name, count):
 
     # Reorder DataFrame
     data = data[other_cols + cols_to_move]
-    return data
+    return data.copy()
 
 
 organism_dict = {
