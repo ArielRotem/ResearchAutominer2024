@@ -1621,6 +1621,86 @@ def find_closest_lab_value(
     return data
 
 
+def find_closest_lab_value_by_datetime_batch(data,start_col,step_size,num_batches,date_col_offset,ct_time_col,max_gap_hours_before,result_col,max_gap_hours_after=None,batch=1,result_offset=1):
+    for i in range(1, batch + 1):
+        data = find_closest_lab_value_by_datetime(
+            data,
+            start_col,
+            step_size,
+            num_batches,
+            date_col_offset,
+            f"{ct_time_col}_{i}",
+            max_gap_hours_before,
+            f"{result_col}_{i}",
+            max_gap_hours_after
+        )
+        data = move_column_relative_to_another(data, f"{ct_time_col}_{i}", result_offset, f"{result_col}_{i}")
+
+    return data
+
+def find_closest_lab_value_by_datetime(
+    data,
+    start_col,
+    step_size,
+    num_batches,
+    date_col_offset,
+    ct_time_col,
+    max_gap_hours_before,
+    result_col,
+    max_gap_hours_after=None
+):
+    """
+    For each row, finds the lab value closest to the CT datetime.
+
+    Args:
+        start_col: First lab value column (e.g. "CRP_1")
+        step_size: Number of columns per lab batch (e.g. 2)
+        num_batches: Number of lab batches (e.g. 15)
+        date_col_offset: Offset to the datetime field within each batch
+        ct_time_col: Column containing the datetime of CT
+        max_gap_hours_before: Max hours before the CT allowed
+        result_col: Column to write the result into
+        max_gap_hours_after: Optional max hours after the CT allowed
+    """
+    start_idx = column_name_to_index(data, start_col)
+    ref_idx = column_name_to_index(data, ct_time_col)
+
+    def find_best_match(row):
+        try:
+            reference_time = pd.to_datetime(row.iloc[ref_idx])
+        except Exception:
+            return ""
+
+        candidates = []
+
+        for i in range(num_batches):
+            val_idx = start_idx + i * step_size
+            date_idx = val_idx + date_col_offset
+
+            try:
+                val = row.iloc[val_idx]
+                lab_time = pd.to_datetime(row.iloc[date_idx])
+                delta_hours = (reference_time - lab_time).total_seconds() / 3600
+                candidates.append((delta_hours, val))
+            except Exception:
+                continue
+
+        before = [(abs(d), v) for d, v in candidates if d >= 0 and d <= max_gap_hours_before]
+        after = []
+        if max_gap_hours_after and max_gap_hours_after > 0:
+            after = [(abs(d), v) for d, v in candidates if d < 0 and abs(d) <= max_gap_hours_after]
+
+        if before:
+            return sorted(before)[0][1]
+        elif after:
+            return sorted(after)[0][1]
+        else:
+            return ""
+
+    data[result_col] = data.apply(find_best_match, axis=1)
+    return data
+
+
 def detect_multiple_antibiotics(data, source_col, result_col):
     """
     Detects if more than one unique antibiotic name appears in the comma-separated field.
@@ -1919,7 +1999,7 @@ def move_column_relative_to_another(data, reference_col, offset, results_col):
     cols.insert(insert_idx, results_col)
 
     # Reorder the DataFrame
-    return data[cols]
+    return data[cols].copy()
 
 
 organism_dict = {
@@ -2623,26 +2703,76 @@ def main():
     ##print(len(data), " rows before splitting CTs, ", len(data_singled), " after.")
     ##data = data_singled
 
-    data = flag_infectious_indication_from_free_text_batch(data,
-                            column_name="imaging_ct/cti (first 10)-interpretation",
-                            infectious_phrases=["חום", "חומים", "פקקת", "דלקת", "אבצס", "אבסס", "מורסה", "קולקציה", "מזוהמת", "זיהום", "OVT", "abscess", "fever", "inflammation", "collection"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
-                            result_col="Imaging_Infectious_Reason",  ## e.g. Imaging_Infectious_Reason_1, Imaging_Infectious_Reason_2 etc 
-                            snippet_col="Infectious_Reason_Snippet", ## e.g. Infectious_Reason_Snippet_1, Infectious_Reason_Snippet_2 etc
-                            partialMatch=True,
-                            batch=6,
-                            result_offset=2
+    keyword_dict = {
+    "chlorhexidine": ["כלורהקסידין", "Alcohol 70%+Chlorhexidine 0.5%"],
+    "scrub": ["septal scrub", "ספטל סקרב", "septal acrub", "Chlorhexidine 4%"],
+    "povidone": ["povidone", "polydine", "פולידין"]
+    }
+
+    data = check_disinfection_components(
+        data=data,
+        text_col="scrub-value textual",
+        scrub_raw_data_col="scrub-all row data",
+        backup_col="surgery reports-disinfection",
+        result_col="sufficient_disinfection_yes/no",
+        keyword_dict=keyword_dict
     )
 
-
-    data = extract_sentences_containing_words_batch(data,
-                            column_name="imaging_ct/cti (first 10)-interpretation",
-                            keywords=["קולקציה", "אבצס"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
-                            result_column_name="Imaging_Collection_Sentences_Extracted",
-                            batch=6,
-                            result_offset=2
+    #for closest temparture
+    data = find_closest_lab_value_by_datetime_batch(
+        data=data,
+        start_col="count of fever over 38-numeric result_1",
+        step_size=3,
+        num_batches=130,
+        date_col_offset=-1,
+        ct_time_col="imaging_ct/cti (first 10)-exam start time-date",
+        max_gap_hours_before=12,
+        result_col="closest_fever",
+        max_gap_hours_after=12,
+        batch=6,
+        result_offset=3
     )
+    data = find_closest_lab_value_batch(
+        data=data,
+        start_col="wbc (first 50)-numeric result_1",
+        step_size=2,
+        num_batches=15,
+        date_col_offset=-1,
+        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
+        max_gap_hours_before=24,
+        result_col="closest_WBC",
+        max_gap_hours_after=12,
+        batch=6,
+        result_offset=4
+    )
+    data = find_closest_lab_value_batch(
+        data=data,
+        start_col="crp (first 50)-numeric result_1",
+        step_size=2,
+        num_batches=15,
+        date_col_offset=-1,
+        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
+        max_gap_hours_before=24,
+        result_col="closest_CRP",
+        max_gap_hours_after=12,
+        batch=6,
+        result_offset=4
+    )
+    data = find_closest_lab_value_batch(
+        data=data,
+        start_col="plt (first 50)-numeric result_1",
+        step_size=2,
+        num_batches=15,
+        date_col_offset=-1,
+        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
+        max_gap_hours_before=24,
+        result_col="closest_PLT",
+        max_gap_hours_after=12,
+        batch=6,
+        result_offset=4
+    )
+    
+ 
 
     data = flag_infectious_indication_from_free_text_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
@@ -2662,7 +2792,6 @@ def main():
                             batch=6,
                             result_offset=2
     )
-
     data = flag_infectious_indication_from_free_text_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["פגיעה באורטר", "פגיעה בשופכן", "שופכן", "אורטר", "פגיעה בדרכי שתן"],
@@ -2672,7 +2801,6 @@ def main():
                             batch=6,
                             result_offset=2
     )
-
     data = flag_infectious_indication_from_free_text_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
                             infectious_phrases=["אפנדציטיס", "אפנדציט", "תוספתן"],
@@ -2683,80 +2811,26 @@ def main():
                             result_offset=2
     )
 
-
-    keyword_dict = {
-    "chlorhexidine": ["כלורהקסידין", "Alcohol 70%+Chlorhexidine 0.5%"],
-    "scrub": ["septal scrub", "ספטל סקרב", "septal acrub", "Chlorhexidine 4%"],
-    "povidone": ["povidone", "polydine", "פולידין"]
-    }
-
-    data = check_disinfection_components(
-        data=data,
-        text_col="scrub-value textual",
-        scrub_raw_data_col="scrub-all row data",
-        backup_col="surgery reports-disinfection",
-        result_col="sufficient_disinfection_yes/no",
-        keyword_dict=keyword_dict
+    data = extract_sentences_containing_words_batch(data,
+                            column_name="imaging_ct/cti (first 10)-interpretation",
+                            keywords=["קולקציה", "אבצס"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
+                            result_column_name="Imaging_Collection_Sentences_Extracted",
+                            batch=6,
+                            result_offset=2
+    )
+    data = flag_infectious_indication_from_free_text_batch(data,
+                            column_name="imaging_ct/cti (first 10)-interpretation",
+                            infectious_phrases=["חום", "חומים", "פקקת", "דלקת", "אבצס", "אבסס", "מורסה", "קולקציה", "מזוהמת", "זיהום", "OVT", "abscess", "fever", "inflammation", "collection"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
+                            result_col="Imaging_Infectious_Reason",  ## e.g. Imaging_Infectious_Reason_1, Imaging_Infectious_Reason_2 etc 
+                            snippet_col="Infectious_Reason_Snippet", ## e.g. Infectious_Reason_Snippet_1, Infectious_Reason_Snippet_2 etc
+                            partialMatch=True,
+                            batch=6,
+                            result_offset=2
     )
 
 
-    data = find_closest_lab_value_batch(
-        data=data,
-        start_col="wbc (first 50)-numeric result_1",
-        step_size=2,
-        num_batches=15,
-        date_col_offset=-1,
-        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
-        max_gap_hours_before=24,
-        result_col="closest_WBC",
-        max_gap_hours_after=12,
-        batch=6,
-        result_offset=4
-    )
-
-    data = find_closest_lab_value_batch(
-        data=data,
-        start_col="crp (first 50)-numeric result_1",
-        step_size=2,
-        num_batches=15,
-        date_col_offset=-1,
-        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
-        max_gap_hours_before=24,
-        result_col="closest_CRP",
-        max_gap_hours_after=12,
-        batch=6,
-        result_offset=4
-    )
-    
-    data = find_closest_lab_value_batch(
-        data=data,
-        start_col="plt (first 50)-numeric result_1",
-        step_size=2,
-        num_batches=15,
-        date_col_offset=-1,
-        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
-        max_gap_hours_before=24,
-        result_col="closest_PLT",
-        max_gap_hours_after=12,
-        batch=6,
-        result_offset=4
-    )
-    
-    #for closest temparture
-    data = find_closest_lab_value_batch(
-        data=data,
-        start_col="count of fever over 38-numeric result_1",
-        step_size=3,
-        num_batches=130,
-        date_col_offset=-1,
-        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-date",
-        max_gap_hours_before=12,
-        result_col="closest_fever",
-        max_gap_hours_after=12,
-        batch=6,
-        result_offset=3
-    )
-    
     data = detect_multiple_antibiotics(
         data=data,
         source_col="concat_antibiotics_given",
