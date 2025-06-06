@@ -1355,8 +1355,9 @@ def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, 
     return data
 
 
-def flag_infectious_indication_from_free_text_batch(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5, partialMatch=False, batch=1):
+def flag_infectious_indication_from_free_text_batch(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5, partialMatch=False, batch=1, move_col_end="", cols_to_move=1):
     for i in range(1, batch + 1):
+        data = move_columns_to_end(data, f"{move_col_end}_{i}", cols_to_move)
         data = flag_infectious_indication_from_free_text(data, f"{column_name}_{i}", infectious_phrases, negation_prefixes, f"{result_col}_{i}", f"{snippet_col}_{i}", context_window, partialMatch)
     return data
 
@@ -1397,8 +1398,9 @@ def flag_infectious_indication_from_free_text(data, column_name, infectious_phra
     return data
 
 
-def extract_sentences_containing_words_batch(data, column_name, keywords, negation_prefixes, result_column_name, batch=1):
+def extract_sentences_containing_words_batch(data, column_name, keywords, negation_prefixes, result_column_name, batch=1, move_col_end="", cols_to_move=1):
     for i in range(1, batch + 1):
+        data = move_columns_to_end(data, f"{move_col_end}_{i}", cols_to_move)
         data = extract_sentences_containing_words(data, f"{column_name}_{i}", keywords, negation_prefixes, f"{result_column_name}_{i}")
     return data
     
@@ -1533,8 +1535,9 @@ def check_disinfection_components(data, text_col, scrub_raw_data_col, backup_col
 
 
 
-def find_closest_lab_value_batch(data,start_col,step_size,num_batches,date_col_offset,ct_time_reference_col,max_gap_hours_before,result_col,max_gap_hours_after=None,batch=1):
+def find_closest_lab_value_batch(data,start_col,step_size,num_batches,date_col_offset,ct_time_reference_col,max_gap_hours_before,result_col,max_gap_hours_after=None,batch=1,move_col_end="",cols_to_move=1):
     for i in range(1, batch + 1):
+        data = move_columns_to_end(data, f"{move_col_end}_{i}", cols_to_move)
         data = find_closest_lab_value(
             data,
             start_col,
@@ -1893,6 +1896,20 @@ def create_column_from_value_map(data, source_column, new_column, value_map, def
     return data
 
 
+def move_columns_to_end(data, start_col_name, count):
+    """
+    Moves a range of columns starting from `start_col_name` (inclusive)
+    and spanning `count` columns to the end of the DataFrame.
+    """
+    start_idx = data.columns.get_loc(start_col_name)
+    cols_to_move = data.columns[start_idx:start_idx + count].tolist()
+
+    # Get all other columns
+    other_cols = [col for col in data.columns if col not in cols_to_move]
+
+    # Reorder DataFrame
+    data = data[other_cols + cols_to_move]
+    return data
 
 
 organism_dict = {
@@ -2603,7 +2620,9 @@ def main():
                             result_col="Imaging_Infectious_Reason",  ## e.g. Imaging_Infectious_Reason_1, Imaging_Infectious_Reason_2 etc 
                             snippet_col="Infectious_Reason_Snippet", ## e.g. Infectious_Reason_Snippet_1, Infectious_Reason_Snippet_2 etc
                             partialMatch=True,
-                            batch=6
+                            batch=6,
+                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+                            cols_to_move=4
     )
 
 
@@ -2612,7 +2631,9 @@ def main():
                             keywords=["קולקציה", "אבצס"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
                             result_column_name="Imaging_Collection_Sentences_Extracted",
-                            batch=6
+                            batch=6,
+                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+                            cols_to_move=4
     )
 
     data = flag_infectious_indication_from_free_text_batch(data,
@@ -2621,7 +2642,9 @@ def main():
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא", "בשאלה"],
                             result_col="Imaging_OVT_Yes_No",
                             snippet_col="Imaging_OVT_Yes_No_Reason",
-                            batch=6
+                            batch=6,
+                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+                            cols_to_move=4
     )
     data = flag_infectious_indication_from_free_text_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
@@ -2629,7 +2652,9 @@ def main():
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
                             result_col="Imaging_Intestine_Yes_No",
                             snippet_col="Imaging_Intestine_Yes_No_Reason",
-                            batch=6
+                            batch=6,
+                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+                            cols_to_move=4
     )
 
     data = flag_infectious_indication_from_free_text_batch(data,
@@ -2638,7 +2663,9 @@ def main():
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה", "שלילת"],
                             result_col="Imaging_ureter_Yes_No",
                             snippet_col="Imaging_ureter_Yes_No_Reason",
-                            batch=6
+                            batch=6,
+                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+                            cols_to_move=4
     )
 
     data = flag_infectious_indication_from_free_text_batch(data,
@@ -2647,7 +2674,9 @@ def main():
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה", "שלילת"],
                             result_col="Imaging_Appendicitis_Yes_No",
                             snippet_col="Imaging_Appendicitis_Yes_No_Reason",
-                            batch=6
+                            batch=6,
+                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+                            cols_to_move=4
     )
 
 
@@ -2677,7 +2706,9 @@ def main():
         max_gap_hours_before=24,
         result_col="closest_WBC",
         max_gap_hours_after=12,
-        batch=6
+        batch=6,
+        move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+        cols_to_move=4
     )
 
     data = find_closest_lab_value_batch(
@@ -2690,7 +2721,9 @@ def main():
         max_gap_hours_before=24,
         result_col="closest_CRP",
         max_gap_hours_after=12,
-        batch=6
+        batch=6,
+        move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+        cols_to_move=4
     )
     
     data = find_closest_lab_value_batch(
@@ -2703,7 +2736,9 @@ def main():
         max_gap_hours_before=24,
         result_col="closest_PLT",
         max_gap_hours_after=12,
-        batch=6
+        batch=6,
+        move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+        cols_to_move=4
     )
     
     #for closest temparture
@@ -2717,7 +2752,9 @@ def main():
         max_gap_hours_before=12,
         result_col="closest_fever",
         max_gap_hours_after=12,
-        batch=6
+        batch=6,
+        move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
+        cols_to_move=4
     )
     
     data = detect_multiple_antibiotics(
