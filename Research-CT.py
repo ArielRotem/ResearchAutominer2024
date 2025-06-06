@@ -2086,7 +2086,6 @@ def split_and_save_csv(data, column_name, full_output_file, csv_file_under_38, c
 def main():
     input_filepath = 'input.csv'
     output_filepath = 'output.csv'
-
     all_data = load_data(input_filepath)
     if all_data is None:
         print("Error, all_data is none. Tell Ariel.")
@@ -2610,7 +2609,7 @@ def main():
 
     data = extract_sentences_containing_words_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
-                            keywords=["קולקציה"],
+                            keywords=["קולקציה", "אבצס"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
                             result_column_name="Imaging_Collection_Sentences_Extracted",
                             batch=6
@@ -2618,7 +2617,7 @@ def main():
 
     data = flag_infectious_indication_from_free_text_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
-                            infectious_phrases=["פקקת", "טרומבוזיס", "טרומבוסיס", "OVT"],
+                            infectious_phrases=["פקקת", "טרומבוזיס", "טרומבוסיס", "OVT", "ovarian vein thrombosis"],
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא", "בשאלה"],
                             result_col="Imaging_OVT_Yes_No",
                             snippet_col="Imaging_OVT_Yes_No_Reason",
@@ -2635,8 +2634,8 @@ def main():
 
     data = flag_infectious_indication_from_free_text_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
-                            infectious_phrases=["פגיעה באורטר"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
+                            infectious_phrases=["פגיעה באורטר", "פגיעה בשופכן", "שופכן", "אורטר", "פגיעה בדרכי שתן"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה", "שלילת"],
                             result_col="Imaging_ureter_Yes_No",
                             snippet_col="Imaging_ureter_Yes_No_Reason",
                             batch=6
@@ -2644,8 +2643,8 @@ def main():
 
     data = flag_infectious_indication_from_free_text_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
-                            infectious_phrases=["אפנדציטיס", "אפנדציט"],
-                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה"],
+                            infectious_phrases=["אפנדציטיס", "אפנדציט", "תוספתן"],
+                            negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא", "נשלל", "נשללה", "בשאלה", "שלילת"],
                             result_col="Imaging_Appendicitis_Yes_No",
                             snippet_col="Imaging_Appendicitis_Yes_No_Reason",
                             batch=6
@@ -2687,7 +2686,7 @@ def main():
         step_size=2,
         num_batches=15,
         date_col_offset=-1,
-        ct_time_reference_col="=imaging_ct/cti (first 10)-exam start time-days from reference",
+        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
         max_gap_hours_before=24,
         result_col="closest_CRP",
         max_gap_hours_after=12,
@@ -2703,6 +2702,20 @@ def main():
         ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-days from reference",
         max_gap_hours_before=24,
         result_col="closest_PLT",
+        max_gap_hours_after=12,
+        batch=6
+    )
+    
+    #for closest temparture
+    data = find_closest_lab_value_batch(
+        data=data,
+        start_col="count of fever over 38-numeric result_1",
+        step_size=3,
+        num_batches=130,
+        date_col_offset=-1,
+        ct_time_reference_col="imaging_ct/cti (first 10)-exam start time-date",
+        max_gap_hours_before=12,
+        result_col="closest_fever",
         max_gap_hours_after=12,
         batch=6
     )
@@ -2818,11 +2831,17 @@ def main():
         'reference occurrence number',
         'date of birth~date of death - days from delivery',
         'date of first documentation - birth occurence',
-        #'has imaging (first ct/cti)-exam start time-days from reference',
+        'has imaging (first ct/cti)-exam start time-days from reference',
+        'imaging_ct/cti (first 10)-performed procedures_1',
+        'imaging_ct/cti (first 10)-performed procedures_2',
+        'imaging_ct/cti (first 10)-performed procedures_3',
+        'imaging_ct/cti (first 10)-performed procedures_4',
+        'imaging_ct/cti (first 10)-performed procedures_5',
+        'imaging_ct/cti (first 10)-performed procedures_6',
         'fetus count',
         'type of labor onset',
         'gestational age',
-        'has imaging (first ct/cti)-exam start time-date~imaging_ct/cti (first 10)-performed procedures_6',
+        'has imaging (first ct/cti)-exam start time-date~imaging_ first cti/usi-performed procedures',
         'amniofusion-date of measurement-days from reference',
         'hemostasis-value numeric',
         'hemostasis-code',
@@ -2861,7 +2880,7 @@ def main():
         #'gbs status-gbs in urine~gbs diagnosis-diagnosis'
   
      ])
-    data = add_row_index_column(data, col_name="CT_Index")
+    #data = add_row_index_column(data, col_name="CT_Index")
     
     save_data (data, 'output.csv')
 
