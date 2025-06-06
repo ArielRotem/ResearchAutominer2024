@@ -1355,10 +1355,12 @@ def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, 
     return data
 
 
-def flag_infectious_indication_from_free_text_batch(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5, partialMatch=False, batch=1, move_col_end="", cols_to_move=1):
+def flag_infectious_indication_from_free_text_batch(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5, partialMatch=False, batch=1, result_offset=1):
     for i in range(1, batch + 1):
-        data = move_columns_to_end(data, f"{move_col_end}_{i}", cols_to_move)
         data = flag_infectious_indication_from_free_text(data, f"{column_name}_{i}", infectious_phrases, negation_prefixes, f"{result_col}_{i}", f"{snippet_col}_{i}", context_window, partialMatch)
+        data = move_column_relative_to_another(data, f"{column_name}_{i}", result_offset, f"{result_col}_{i}")
+        data = move_column_relative_to_another(data, f"{column_name}_{i}", result_offset+1, f"{snippet_col}_{i}")
+
     return data
 
 def flag_infectious_indication_from_free_text(data, column_name, infectious_phrases, negation_prefixes, result_col, snippet_col, context_window=5, partialMatch=False):
@@ -1398,10 +1400,11 @@ def flag_infectious_indication_from_free_text(data, column_name, infectious_phra
     return data
 
 
-def extract_sentences_containing_words_batch(data, column_name, keywords, negation_prefixes, result_column_name, batch=1, move_col_end="", cols_to_move=1):
+def extract_sentences_containing_words_batch(data, column_name, keywords, negation_prefixes, result_column_name, batch=1, result_offset=1):
     for i in range(1, batch + 1):
-        data = move_columns_to_end(data, f"{move_col_end}_{i}", cols_to_move)
         data = extract_sentences_containing_words(data, f"{column_name}_{i}", keywords, negation_prefixes, f"{result_column_name}_{i}")
+        data = move_column_relative_to_another(data, f"{column_name}_{i}", result_offset, f"{result_column_name}_{i}")
+
     return data
     
 def extract_sentences_containing_words(data, column_name, keywords, negation_prefixes, result_column_name):
@@ -1535,9 +1538,8 @@ def check_disinfection_components(data, text_col, scrub_raw_data_col, backup_col
 
 
 
-def find_closest_lab_value_batch(data,start_col,step_size,num_batches,date_col_offset,ct_time_reference_col,max_gap_hours_before,result_col,max_gap_hours_after=None,batch=1,move_col_end="",cols_to_move=1):
+def find_closest_lab_value_batch(data,start_col,step_size,num_batches,date_col_offset,ct_time_reference_col,max_gap_hours_before,result_col,max_gap_hours_after=None,batch=1,result_offset=1):
     for i in range(1, batch + 1):
-        data = move_columns_to_end(data, f"{move_col_end}_{i}", cols_to_move)
         data = find_closest_lab_value(
             data,
             start_col,
@@ -1549,6 +1551,8 @@ def find_closest_lab_value_batch(data,start_col,step_size,num_batches,date_col_o
             f"{result_col}_{i}",
             max_gap_hours_after
         )
+        data = move_column_relative_to_another(data, f"{ct_time_reference_col}_{i}", result_offset, f"{result_col}_{i}")
+
     return data
 
 def find_closest_lab_value(
@@ -1896,20 +1900,26 @@ def create_column_from_value_map(data, source_column, new_column, value_map, def
     return data
 
 
-def move_columns_to_end(data, start_col_name, count):
-    """
-    Moves a range of columns starting from `start_col_name` (inclusive)
-    and spanning `count` columns to the end of the DataFrame.
-    """
-    start_idx = data.columns.get_loc(start_col_name)
-    cols_to_move = data.columns[start_idx:start_idx + count].tolist()
+def move_column_relative_to_another(data, reference_col, offset, results_col):
+    cols = list(data.columns)
 
-    # Get all other columns
-    other_cols = [col for col in data.columns if col not in cols_to_move]
+    # Remove the results_col from its current position
+    cols.remove(results_col)
 
-    # Reorder DataFrame
-    data = data[other_cols + cols_to_move]
-    return data.copy()
+    # Find the position of the reference column
+    ref_idx = cols.index(reference_col)
+
+    # Calculate the new position to insert results_col
+    insert_idx = ref_idx + offset
+
+    # Clamp to avoid going out of bounds
+    insert_idx = min(insert_idx, len(cols))
+
+    # Insert the results_col at the calculated index
+    cols.insert(insert_idx, results_col)
+
+    # Reorder the DataFrame
+    return data[cols]
 
 
 organism_dict = {
@@ -2621,8 +2631,7 @@ def main():
                             snippet_col="Infectious_Reason_Snippet", ## e.g. Infectious_Reason_Snippet_1, Infectious_Reason_Snippet_2 etc
                             partialMatch=True,
                             batch=6,
-                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-                            cols_to_move=4
+                            result_offset=2
     )
 
 
@@ -2632,8 +2641,7 @@ def main():
                             negation_prefixes=["ללא", "אין", "not", "no", "doesn’t", "לא נראה", "לא"],
                             result_column_name="Imaging_Collection_Sentences_Extracted",
                             batch=6,
-                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-                            cols_to_move=4
+                            result_offset=2
     )
 
     data = flag_infectious_indication_from_free_text_batch(data,
@@ -2643,8 +2651,7 @@ def main():
                             result_col="Imaging_OVT_Yes_No",
                             snippet_col="Imaging_OVT_Yes_No_Reason",
                             batch=6,
-                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-                            cols_to_move=4
+                            result_offset=2
     )
     data = flag_infectious_indication_from_free_text_batch(data,
                             column_name="imaging_ct/cti (first 10)-interpretation",
@@ -2653,8 +2660,7 @@ def main():
                             result_col="Imaging_Intestine_Yes_No",
                             snippet_col="Imaging_Intestine_Yes_No_Reason",
                             batch=6,
-                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-                            cols_to_move=4
+                            result_offset=2
     )
 
     data = flag_infectious_indication_from_free_text_batch(data,
@@ -2664,8 +2670,7 @@ def main():
                             result_col="Imaging_ureter_Yes_No",
                             snippet_col="Imaging_ureter_Yes_No_Reason",
                             batch=6,
-                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-                            cols_to_move=4
+                            result_offset=2
     )
 
     data = flag_infectious_indication_from_free_text_batch(data,
@@ -2675,8 +2680,7 @@ def main():
                             result_col="Imaging_Appendicitis_Yes_No",
                             snippet_col="Imaging_Appendicitis_Yes_No_Reason",
                             batch=6,
-                            move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-                            cols_to_move=4
+                            result_offset=2
     )
 
 
@@ -2707,8 +2711,7 @@ def main():
         result_col="closest_WBC",
         max_gap_hours_after=12,
         batch=6,
-        move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-        cols_to_move=4
+        result_offset=4
     )
 
     data = find_closest_lab_value_batch(
@@ -2722,8 +2725,7 @@ def main():
         result_col="closest_CRP",
         max_gap_hours_after=12,
         batch=6,
-        move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-        cols_to_move=4
+        result_offset=4
     )
     
     data = find_closest_lab_value_batch(
@@ -2737,8 +2739,7 @@ def main():
         result_col="closest_PLT",
         max_gap_hours_after=12,
         batch=6,
-        move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-        cols_to_move=4
+        result_offset=4
     )
     
     #for closest temparture
@@ -2753,8 +2754,7 @@ def main():
         result_col="closest_fever",
         max_gap_hours_after=12,
         batch=6,
-        move_col_end="imaging_ct/cti (first 10)-exam start time-days from reference",
-        cols_to_move=4
+        result_offset=3
     )
     
     data = detect_multiple_antibiotics(
