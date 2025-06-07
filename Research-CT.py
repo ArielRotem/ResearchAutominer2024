@@ -2002,19 +2002,11 @@ def move_column_relative_to_another(data, reference_col, offset, results_col):
     return data[cols].copy()
 
 
-def detect_combination_antibiotics(data, source_col, result_col_2plus, result_col_3plus, combinations):
+def detect_combination_antibiotics(data, source_col, result_col_2plus, result_col_3plus, combinations, synonyms=[]):
     """
-    Detects if there are 2+ or 3+ logical antibiotic units in a field.
-    - Merges comma-formatted numbers (e.g. 1,000,000 → 1000000)
-    - Extracts ALL-CAPS names (including multi-word names)
-    - Uses predefined combination groups to count them as a single unit
-
-    Args:
-        data: DataFrame
-        source_col: Column with raw antibiotics text
-        result_col_2plus: Column to mark if 2+ units found
-        result_col_3plus: Column to mark if 3+ units found
-        combinations: List of sets (e.g. [{"PIPERACILLIN", "TAZOBACTAM"}])
+    Detects if there are 2+ or 3+ logical antibiotic units in a field, with support for:
+    - Combination treatments (e.g. PIPERACILLIN + TAZOBACTAM counts as 1)
+    - Alternate spellings (e.g. [GLENDAMIDAZINE, GLENDAMYDASINE] counted once)
     """
     col_idx = column_name_to_index(data, source_col)
 
@@ -2023,28 +2015,31 @@ def detect_combination_antibiotics(data, source_col, result_col_2plus, result_co
         if pd.isna(raw) or str(raw).strip() == "":
             return 0, 0
 
-        # Merge numbers like "1,000,000" → "1000000"
         cleaned = re.sub(r'(\d),(\d{3})', r'\1\2', str(raw))
-
-        # Split into parts, strip, and remove empty
         parts = [p.strip() for p in cleaned.split(",") if p.strip()]
 
-        # Extract all-caps medicine names (e.g., "PIPERACILLIN TAZOBACTAM")
         names = set()
         for part in parts:
             match = re.match(r'^([A-Z]+(?: [A-Z]+)*)', part)
             if match:
                 names.add(match.group(1).strip())
 
-        names = set(names)  # Copy to allow mutation
+        # Apply synonym normalization (keep only one form)
+        for group in synonyms:
+            found = [alt for alt in group if alt in names]
+            if found:
+                keep = found[0]
+                for alt in found[1:]:
+                    names.discard(alt)
+
+        # Apply combination collapse
         unit_count = 0
-
+        names_copy = set(names)
         for combo in combinations:
-            if combo.issubset(names):
-                names.difference_update(combo)
+            if combo.issubset(names_copy):
+                names_copy.difference_update(combo)
                 unit_count += 1
-
-        unit_count += len(names)  # Add remaining unmatched names
+        unit_count += len(names_copy)
 
         return int(unit_count >= 2), int(unit_count >= 3)
 
@@ -2696,6 +2691,10 @@ def main():
     #    output_file="patient_specific_dataset.csv"
     #)
 
+    synonyms = [
+        ["GLENDAMIDAZINE", "GLENDAMYDASINE", "GLENDAMIZINE"],
+        ["GENTAMICIN", "GENTAMYCIN"]
+    ]
     combos = [
         {"AUGMENTIN BID", "AUGMENTIN"},
         {"AMPICILLIN", "GENTAMICIN"},
@@ -2709,7 +2708,7 @@ def main():
         {"ROCEPHIN", "METRONIDAZOLE"},
         {"CEFTRIAXONE", "METRONIDAZOLE"}
     ] # Counts pairs seen in the concatenated abx given + adds number of left over (unique) abx
-    data = detect_combination_antibiotics(data, "concat_antibiotics_given", "has_2plus_abx", "has_3plus_abx", combos)
+    data = detect_combination_antibiotics(data, "concat_antibiotics_given", "has_2plus_abx", "has_3plus_abx", combos, synonyms)
 
     summary = summarize_keys_and_values_in_raw_map(
         data=data,
