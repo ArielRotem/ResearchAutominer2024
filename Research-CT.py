@@ -2002,6 +2002,58 @@ def move_column_relative_to_another(data, reference_col, offset, results_col):
     return data[cols].copy()
 
 
+def detect_combination_antibiotics(data, source_col, result_col_2plus, result_col_3plus, combinations):
+    """
+    Detects if there are 2+ or 3+ logical antibiotic units in a field.
+    - Merges comma-formatted numbers (e.g. 1,000,000 → 1000000)
+    - Extracts ALL-CAPS names (including multi-word names)
+    - Uses predefined combination groups to count them as a single unit
+
+    Args:
+        data: DataFrame
+        source_col: Column with raw antibiotics text
+        result_col_2plus: Column to mark if 2+ units found
+        result_col_3plus: Column to mark if 3+ units found
+        combinations: List of sets (e.g. [{"PIPERACILLIN", "TAZOBACTAM"}])
+    """
+    col_idx = column_name_to_index(data, source_col)
+
+    def process_row(row):
+        raw = row.iloc[col_idx]
+        if pd.isna(raw) or str(raw).strip() == "":
+            return 0, 0
+
+        # Merge numbers like "1,000,000" → "1000000"
+        cleaned = re.sub(r'(\d),(\d{3})', r'\1\2', str(raw))
+
+        # Split into parts, strip, and remove empty
+        parts = [p.strip() for p in cleaned.split(",") if p.strip()]
+
+        # Extract all-caps medicine names (e.g., "PIPERACILLIN TAZOBACTAM")
+        names = set()
+        for part in parts:
+            match = re.match(r'^([A-Z]+(?: [A-Z]+)*)', part)
+            if match:
+                names.add(match.group(1).strip())
+
+        names = set(names)  # Copy to allow mutation
+        unit_count = 0
+
+        for combo in combinations:
+            if combo.issubset(names):
+                names.difference_update(combo)
+                unit_count += 1
+
+        unit_count += len(names)  # Add remaining unmatched names
+
+        return int(unit_count >= 2), int(unit_count >= 3)
+
+    result = data.apply(process_row, axis=1)
+    data[result_col_2plus] = result.apply(lambda x: x[0])
+    data[result_col_3plus] = result.apply(lambda x: x[1])
+    return data
+
+
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -2644,6 +2696,13 @@ def main():
     #    output_file="patient_specific_dataset.csv"
     #)
 
+    combos = [
+        {"PIPERACILLIN", "TAZOBACTAM"},
+        {"AMPICILLIN", "SULBACTAM"},
+        {"AMOXICILLIN", "CLAVULANATE"}
+    ] # Counts pairs seen in the concatenated abx given + adds number of left over (unique) abx
+    data = detect_combination_antibiotics(data, "concat_antibiotics_given", "has_2plus_abx", "has_3plus_abx", combos)
+
     summary = summarize_keys_and_values_in_raw_map(
         data=data,
         input_column="scrub-all row data",
@@ -2988,15 +3047,15 @@ def main():
 
     # 2. Copy organism name, category, and growth type from existing 'other_culture_' columns where 'מורסה' is mentioned
     data['abscess_culture_organism_name'] = data.apply(
-    lambda row: row['other_culture_organisms_detected'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+        lambda row: row['other_culture_organisms_detected'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
     )
 
     data['abscess_culture_organism_category'] = data.apply(
-    lambda row: row['other_culture_organisms_category'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+        lambda row: row['other_culture_organisms_category'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
     )
 
     data['abscess_culture_type_of_growth'] = data.apply(
-    lambda row: row['other_culture_Type_of_growth'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+        lambda row: row['other_culture_Type_of_growth'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
     )
 
 
