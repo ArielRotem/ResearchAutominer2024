@@ -2697,9 +2697,17 @@ def main():
     #)
 
     combos = [
-        {"PIPERACILLIN", "TAZOBACTAM"},
-        {"AMPICILLIN", "SULBACTAM"},
-        {"AMOXICILLIN", "CLAVULANATE"}
+        {"AUGMENTIN BID", "AUGMENTIN"},
+        {"AMPICILLIN", "GENTAMICIN"},
+        {"AMPICILLIN", "GENTAMYCIN"},
+        {"DALACIN", "GENTAMICIN"},
+        {"DALACIN", "GENTAMYCIN"},
+        {"CLINDAMYCIN", "GENTAMICIN"},
+        {"CLINDAMYCIN", "GENTAMYCIN"},
+        {"ROCEPHIN", "FLAGYL"},
+        {"CEFTRIAXONE", "FLAGYL"},
+        {"ROCEPHIN", "METRONIDAZOLE"},
+        {"CEFTRIAXONE", "METRONIDAZOLE"}
     ] # Counts pairs seen in the concatenated abx given + adds number of left over (unique) abx
     data = detect_combination_antibiotics(data, "concat_antibiotics_given", "has_2plus_abx", "has_3plus_abx", combos)
 
@@ -3089,9 +3097,9 @@ def main():
         'surgery time-surgery start date time~surgery reports-surgery date-hours from reference',
         'surgery reports-complications during surgery~surgery reports-disinfection',
         'full dilation at surgery-value numeric~surgery info-date of procedure',
-        #'hospitalization before delivery (hrp) - admission date',
-        #'hospitalization before delivery (hrp) - discharge date',
-        #'hospitalization before delivery (hrp) - discharge date~hospitalization after delivery - admission date',
+        'hospitalization before delivery (hrp) - admission date',
+        'hospitalization before delivery (hrp) - discharge date~hospitalization before delivery_other - admission date',
+        'hospitalization before delivery_other - discharge date~hospitalization after delivery - admission date',
         'hospitalization after delivery - discharge date~hospitalization after delivery_other-hospitalization after delivery - admission date',
         'hospitalization after delivery_other-hospitalization after delivery - discharge date~length of stay delivery room-room exit - hours from reference_5',
         'transfer to icu-department admission date~transfer to icu-department discharge date',
