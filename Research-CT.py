@@ -2274,6 +2274,10 @@ def main():
     data = is_empty(data, column_name='cs info-main indication', new_column_name='NVD_yes_or_no', value_empty=1, value_not_empty=0)
     data = is_empty(data, column_name='cs info-main indication', new_column_name='CS_yes_or_no', value_empty=0, value_not_empty=1)
 
+    #create operative delivery yes/no columns
+    data = is_empty(data, column_name='vacuum_diagnosis', new_column_name='vacuume_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, column_name='forceps_diagnosis', new_column_name='forceps_yes_or_no', value_empty=0, value_not_empty=1)
+    
     #create surgical complications yes/no column
     data = is_empty(data, column_name='surgical complications-procedure', new_column_name='surgical_complication_yes_or_no', value_empty=0, value_not_empty=1)
     
@@ -2394,6 +2398,17 @@ def main():
         "2": ["א.א.ג ניתוחי ראש וצוואר", "אורולוגיה", "השהיה מלרד", "כירורגית ב", "כירורגית ג", "מלונית", "נוירולוגיה", "פנימית ו", "פנימית ט", "אונקולוגית", "פנימית א", "פנימית ד", "פנימית ג", "שרות שיקום מרחוק תנועה"],
     }
     update_column_with_values(data, 'readmission-admitting department', words_dict_9, default_value="Other", empty_value="0")
+
+    #create yes/no column for readmission
+    data = compare_values(data, column_name='readmission-admitting department', new_column_name='readmission_OBGYN_yes/no',
+                               target_value=1,
+                               match_return=1,
+                               no_match_return=0)
+    data = compare_values(data, column_name='readmission-admitting department', new_column_name='readmission_Other_yes/no',
+                               target_value=2,
+                               match_return=1,
+                               no_match_return=0)
+    
 
 
     #*עמודה - בשם epidural-anesthesia type
@@ -2586,6 +2601,8 @@ def main():
     data = is_empty(data, 'maternal vte_before delivery-diagnosis', 'maternal vte_before_delivery_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal infection post partum-diagnosis', 'maternal_infection_post_partum_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'hospitalization before delivery (hrp) - admission date', 'HRP_hospitalization_prepartum_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'hospitalization before delivery_other - admission date', 'other_hospitalization_prepartum_yes_or_no', value_empty=0, value_not_empty=1)
+
     data = is_empty(data, 'hospitalization after delivery_other-hospitalization after delivery - admitting department', 'other_hospitalization_postpartum_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'pprom diagnosis-date of documentation', 'PPROM_yes_or_no', value_empty=0, value_not_empty=1)
     
@@ -2598,6 +2615,9 @@ def main():
     
     # Check if numeric values in column 'hospitalization before delivery (hrp) - length of stay (days)' meet or exceed the cutoff of 3, and add results in a new column '___'
     data = cutoff_number(data, 'hospitalization before delivery (hrp) - length of stay (days)', 'Pre-labor_HRP_over_3d_yes_or_no', 3, above=1, below=0, empty_value='')
+    data = cutoff_number(data, 'hospitalization before delivery_other - length of stay (days)', 'Pre-labor_other_over_3d_yes_or_no', 3, above=1, below=0, empty_value='')
+    
+
 
     # Flip the sign of numeric values in column 'BA'
     data = flip_sign(data, 'fever_max 38-43 before delivery-date of measurement-hours from reference')
@@ -2732,6 +2752,11 @@ def main():
         batch=6,
         result_offset=3
     )
+
+    #for fever at first CT yes/no
+    data = is_empty(data, column_name='closest_fever_1', new_column_name='Fever_at_1st_CT_yes_or_no', value_empty=0, value_not_empty=1)
+
+    
     data = find_closest_lab_value_batch(
         data=data,
         start_col="wbc (first 50)-numeric result_1",
@@ -2880,27 +2905,68 @@ def main():
     words_dict_20 = {
       #hysterectomy
       "1": ["hysterectomy"],
-      #drainage
-      "2": ["drainage"],
+      #soft tissue
+      "2": ["drainage","debridment", "DEBRIDEMENT"],
       #GI and GU
       "3": ["enterolysis", "colectomy", "adhesions"],
-      #exploratory/diagnistic
-      "4": ["Laparoscopy", "laparotomy"],
-      #soft tissue
-      "5": ["debridment", "DEBRIDEMENT"]
-    }
+      #Laparotomy
+      "4": ["laparotomy"],
+      #Laparoscopy
+      "5": ["Laparoscopy"]
+      
+      }
     update_column_with_values(data, 'postpartum_surgeries_names', words_dict_20, default_value="Other", empty_value="")
     
-    #create yes/no column
+    #create yes/no columns
+    #1
     data = compare_values(
-    data,
-    column_name='postpartum_surgeries_names',
-    new_column_name='postpartum_hysterectomy yes/no',
-    target_value=1,
-    match_return=1,
-    no_match_return=0
+        data,
+        column_name='postpartum_surgeries_names',
+        new_column_name='postpartum_hysterectomy yes/no',
+        target_value=1,
+        match_return=1,
+        no_match_return=0
     )
-
+    #2  
+    data = compare_values(
+        data,
+        column_name='postpartum_surgeries_names',
+        new_column_name='laparotomy yes/no',
+        target_value=4,
+        match_return=1,
+        no_match_return=0
+    )
+    #3
+    data = compare_values(
+        data,
+        column_name='postpartum_surgeries_names',
+        new_column_name='laparoscopy yes/no',
+        target_value=5,
+        match_return=1,
+        no_match_return=0
+    )
+    #4
+    data = compare_values(
+        data,
+        column_name='postpartum_surgeries_names',
+        new_column_name='GI or GU surgery yes/no',
+        target_value=3,
+        match_return=1,
+        no_match_return=0
+    )
+    #5
+    data = compare_values(
+        data,
+        column_name='postpartum_surgeries_names',
+        new_column_name='soft tissue surgery yes/no',
+        target_value=2,
+        match_return=1,
+        no_match_return=0
+    )
+    
+    #create postpartum surgery yes/no
+    data = is_empty(data, column_name='postpartum_surgeries_names', new_column_name='postpartum_surgery_yes_or_no', value_empty=0, value_not_empty=1)
+    
     #split estational age to week column and day column
     data = split_gestational_age(data, column_name='gestational age')
 
@@ -2964,9 +3030,9 @@ def main():
         'surgery time-surgery start date time~surgery reports-surgery date-hours from reference',
         'surgery reports-complications during surgery~surgery reports-disinfection',
         'full dilation at surgery-value numeric~surgery info-date of procedure',
-        'hospitalization before delivery (hrp) - admission date',
-        'hospitalization before delivery (hrp) - discharge date',
-        'hospitalization before delivery (hrp) - discharge date~hospitalization after delivery - admission date',
+        #'hospitalization before delivery (hrp) - admission date',
+        #'hospitalization before delivery (hrp) - discharge date',
+        #'hospitalization before delivery (hrp) - discharge date~hospitalization after delivery - admission date',
         'hospitalization after delivery - discharge date~hospitalization after delivery_other-hospitalization after delivery - admission date',
         'hospitalization after delivery_other-hospitalization after delivery - discharge date~length of stay delivery room-room exit - hours from reference_5',
         'transfer to icu-department admission date~transfer to icu-department discharge date',
@@ -2978,7 +3044,7 @@ def main():
         'fever_max 38-43 after delivery-date of measurement',
         'pprom diagnosis-date of documentation',
         'pprom diagnosis-diagnosis',
-        'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal pph-diagnosis',
+        #'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal pph-diagnosis',
         'crp at 1st imaging 24h-collection date-hours from reference',
         'plt at 1st imaging 24h-collection date-hours from reference',
         'wbc at 1st imaging 24h-collection date-hours from reference',
