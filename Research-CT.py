@@ -2008,7 +2008,7 @@ def move_column_relative_to_another(data, reference_col, offset, results_col):
     return data[cols].copy()
 
 
-def detect_combination_antibiotics(data, source_col, result_col_2plus, result_col_3plus, combinations, synonyms=[]):
+def detect_combination_antibiotics(data, source_col, result_col_2plus, result_col_3plus, combinations, synonyms=[], ignored=[]):
     """
     Detects if there are 2+ or 3+ logical antibiotic units in a field, with support for:
     - Combination treatments (e.g. PIPERACILLIN + TAZOBACTAM counts as 1)
@@ -2029,6 +2029,10 @@ def detect_combination_antibiotics(data, source_col, result_col_2plus, result_co
             match = re.match(r'^([A-Z]+(?: [A-Z]+)*)', part)
             if match:
                 names.add(match.group(1).strip())
+
+        # Remove ignored abx
+        for ignore in ignored:
+             names.discard(ignore)
 
         # Apply synonym normalization (keep only one form)
         for group in synonyms:
@@ -2053,6 +2057,7 @@ def detect_combination_antibiotics(data, source_col, result_col_2plus, result_co
     data[result_col_2plus] = result.apply(lambda x: x[0])
     data[result_col_3plus] = result.apply(lambda x: x[1])
     return data
+
 
 
 def flag_if_column_contains_any_value(data, column_name, target_values, result_col):
@@ -2395,8 +2400,6 @@ def main():
     data = is_empty(data, column_name='vacuum_diagnosis', new_column_name='vacuume_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, column_name='forceps_diagnosis', new_column_name='forceps_yes_or_no', value_empty=0, value_not_empty=1)
     
-    #create surgical complications yes/no column
-    data = is_empty(data, column_name='surgical complications-procedure', new_column_name='surgical_complication_yes_or_no', value_empty=0, value_not_empty=1)
     
     #create Intrapartum fever yes/no column
     data = is_empty(data, column_name='fever_max 38-43 before delivery-numeric result', new_column_name='Intrapartum_fever_yes_or_no', value_empty=0, value_not_empty=1)
@@ -2633,22 +2636,22 @@ def main():
 
 
     #בלון/פרופס
-    words_dict_16 = {
-        "1": ["הכנסת בלון"],
-        "2": ["הכנסת פרופס"]
-    }
-    update_column_with_values(data, 'balloon/propes-measurement', words_dict_16, default_value="Other", empty_value="0")
+    #words_dict_16 = {
+     #   "1": ["הכנסת בלון"],
+      #  "2": ["הכנסת פרופס"]
+    #}
+    #update_column_with_values(data, 'balloon/propes-measurement', words_dict_16, default_value="Other", empty_value="0")
     
     #create yes/no columns
-    data = compare_values(data, column_name='balloon/propes-measurement', new_column_name='Propes_induction_yes/no',
-                               target_value=2,
-                               match_return=1,
-                               no_match_return=0)
+    #data = compare_values(data, column_name='balloon/propes-measurement', new_column_name='Propes_induction_yes/no',
+     #                          target_value=2,
+      #                         match_return=1,
+       #                        no_match_return=0)
     
-    data = compare_values(data, column_name='balloon/propes-measurement', new_column_name='Balloon_induction_yes/no',
-                               target_value=1,
-                               match_return=1,
-                               no_match_return=0)
+    #data = compare_values(data, column_name='balloon/propes-measurement', new_column_name='Balloon_induction_yes/no',
+     #                          target_value=1,
+      #                         match_return=1,
+       #                        no_match_return=0)
     
 
     #זיהום לאחר לידה
@@ -2671,6 +2674,8 @@ def main():
     indicator=0
     )
 
+   #create surgical complications yes/no column
+    data = is_empty(data, column_name='surgical complications-procedure', new_column_name='surgical_complication_yes_or_no', value_empty=0, value_not_empty=1)
     
     words_dict_18 = {
       #GI
@@ -2789,11 +2794,13 @@ def main():
     #)
 
     synonyms = [
-        ["GLENDAMIDAZINE", "GLENDAMYDASINE", "GLENDAMIZINE"],
-        ["GENTAMICIN", "GENTAMYCIN"]
+        ["AUGMENTIN BID", "AUGMENTIN"],
+        ["GENTAMICIN", "GENTAMYCIN"],
+        ["FLAGYL", "METRONIDAZOLE"],
+        ["ROCEPHIN","CEFTRIAXONE"],
+        ["DALACIN", "CLINDAMYCIN"]
     ]
     combos = [
-        {"AUGMENTIN BID", "AUGMENTIN"},
         {"AMPICILLIN", "GENTAMICIN"},
         {"AMPICILLIN", "GENTAMYCIN"},
         {"DALACIN", "GENTAMICIN"},
@@ -2805,7 +2812,7 @@ def main():
         {"ROCEPHIN", "METRONIDAZOLE"},
         {"CEFTRIAXONE", "METRONIDAZOLE"}
     ] # Counts pairs seen in the concatenated abx given + adds number of left over (unique) abx
-    data = detect_combination_antibiotics(data, "concat_antibiotics_given", "has_2plus_abx", "has_3plus_abx", combos, synonyms)
+    data = detect_combination_antibiotics(data, "concat_antibiotics_given", "has_2plus_abx", "has_3plus_abx", combos, synonyms, ignored = ["PENICILLIN"])
 
     summary = summarize_keys_and_values_in_raw_map(
         data=data,
@@ -3112,6 +3119,10 @@ def main():
         target_value=5,
         match_return=1,
         no_match_return=0
+    )
+    data = columns_contain_nonzero_nonfalse(data,
+        column_names=["laparotomy yes/no", "laparoscopy yes/no"],
+        result_col="surgical_drainage_yes/no"
     )
     #4
     data = compare_values(
