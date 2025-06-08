@@ -2099,6 +2099,24 @@ def columns_contain_nonzero_nonfalse(data, column_names, result_col):
     data[result_col] = data.apply(check_row, axis=1)
     return data
 
+def apply_operation_on_columns(data, col1, col2, result_col, operation):
+    """
+    Applies a binary operation on two columns and stores the result.
+    `operation` should be a function like: lambda a, b: a - b
+    """
+    idx1 = column_name_to_index(data, col1)
+    idx2 = column_name_to_index(data, col2)
+
+    def compute(row):
+        try:
+            a = float(row.iloc[idx1])
+            b = float(row.iloc[idx2])
+            return operation(a, b)
+        except Exception:
+            return ""
+
+    data[result_col] = data.apply(compute, axis=1)
+    return data
 
 
 organism_dict = {
@@ -2855,8 +2873,11 @@ def main():
                                                 keywords=["CTI", "USI", "ניקוז"],
                                                 result_col_name="Imaging_Guided_Drainage yes/no",
                                                 date_col_offset=-3,
-                                                date_result_col_name="first_drainage_time"
+                                                date_result_col_name="first_drainage_days_from_ref"
     )
+    data = apply_operation_on_columns(data, "hospitalization after delivery - length of stay (days)", "first_drainage_days_from_ref", "length_of_stay_after_CTI", lambda a, b: a - b)
+    data = apply_operation_on_columns(data, "hospitalization after delivery - length of stay (days)", "imaging_ct/cti (first 10)-exam start time-days from reference_1", "length_of_stay_after_first_CT", lambda a, b: a - b)
+
 
     data = add_row_index_column(data, col_name="Patient_Index")
     
