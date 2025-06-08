@@ -1324,11 +1324,12 @@ def classify_growth_type(text):
         return 1
 
 
-def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, num_steps, keywords, result_col_name):
+def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, num_steps, keywords, result_col_name, date_col_offset, date_result_col_name):
     """
     Flags rows where imaging-guided drainage was performed based on:
     - A single static column being non-empty
     - OR any of the repeated columns (based on step) containing specific keywords
+    Also returns the associated timestamp (from index + date_col_offset) if keyword found.
     """
     static_idx = column_name_to_index(data, static_col)
     repeated_idx = column_name_to_index(data, repeated_col)
@@ -1337,7 +1338,9 @@ def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, 
     def check_row(row):
         # Check static column for non-empty
         if pd.notna(row.iloc[static_idx]) and str(row.iloc[static_idx]).strip() != "":
-            return 1
+            date_idx = static_idx + date_col_offset
+            timestamp = row.iloc[date_idx] if date_idx < len(row) else ""
+            return 1, timestamp
 
         # Check repeated columns for keyword match
         for i in range(num_steps):
@@ -1346,12 +1349,15 @@ def imaging_guided_drainage_detected(data, static_col, repeated_col, step_size, 
                 continue
             val = str(row.iloc[idx]).lower()
             if any(kw in val for kw in keywords_lower):
-                return 1
+                date_idx = idx + date_col_offset
+                timestamp = row.iloc[date_idx] if date_idx < len(row) else ""
+                return 1, timestamp
 
-        # If nothing matched
-        return 0
+        return 0, ""
 
-    data[result_col_name] = data.apply(check_row, axis=1)
+    results = data.apply(check_row, axis=1)
+    data[result_col_name] = results.apply(lambda x: x[0])
+    data[date_result_col_name] = results.apply(lambda x: x[1])
     return data
 
 
@@ -2847,7 +2853,9 @@ def main():
                                                 step_size=4,
                                                 num_steps=6,
                                                 keywords=["CTI", "USI", "ניקוז"],
-                                                result_col_name="Imaging_Guided_Drainage yes/no"
+                                                result_col_name="Imaging_Guided_Drainage yes/no",
+                                                date_col_offset=-3,
+                                                date_result_col_name="first_drainage_time"
     )
 
     data = add_row_index_column(data, col_name="Patient_Index")
