@@ -2049,6 +2049,52 @@ def detect_combination_antibiotics(data, source_col, result_col_2plus, result_co
     return data
 
 
+def flag_if_column_contains_any_value(data, column_name, target_values, result_col):
+    """
+    Adds a column with 1 if any of the target values (case-insensitive substrings) are found in the specified column, 0 otherwise.
+    
+    Args:
+        data: The DataFrame
+        column_name: The name of the column to search
+        target_values: A list of strings to search for (case-insensitive substring match)
+        result_col: The name of the new column to store 0/1 flag
+    """
+    col_idx = column_name_to_index(data, column_name)
+    target_values_lower = [v.lower() for v in target_values]
+
+    def check_row(row):
+        val = str(row.iloc[col_idx]).lower()
+        return int(any(term in val for term in target_values_lower))
+
+    data[result_col] = data.apply(check_row, axis=1)
+    return data
+
+
+def columns_contain_nonzero_nonfalse(data, column_names, result_col):
+    """
+    Adds a column with 1 if any of the specified columns contain a non-empty, non-zero, and non-false value.
+
+    Args:
+        data: The DataFrame
+        column_names: List of column names to check
+        result_col: Name of the column to store the result
+    """
+    indices = [column_name_to_index(data, col) for col in column_names]
+
+    def is_valid(val):
+        if pd.isna(val):
+            return False
+        s = str(val).strip().lower()
+        return s not in ["", "0", "false"] and s != "0.0"
+
+    def check_row(row):
+        return int(any(is_valid(row.iloc[idx]) for idx in indices))
+
+    data[result_col] = data.apply(check_row, axis=1)
+    return data
+
+
+
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -2525,16 +2571,43 @@ def main():
     update_column_with_values(data, 'hemostasis-code', words_dict_14, default_value="Other", empty_value="0")
     
      #create augmentation yes/no column
-    data = is_empty(data, column_name='augmentation meds-medication', new_column_name='augmentation_yes/no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, column_name='augmentation meds-medication', new_column_name='augmentation_yes/no', value_empty=0, value_not_empty=1)
     
     #אוגמנטציה
-    words_dict_15 = {
-        "1": ["MISOPROSTOL"],
-        "2": ["OXYTOCIN"]
-    }
-    update_column_with_values(data, 'augmentation meds-medication', words_dict_15, default_value="Other", empty_value="0")
+    #words_dict_15 = {
+    #    "1": ["MISOPROSTOL"],
+    #    "2": ["OXYTOCIN"]
+    #}
+    #update_column_with_values(data, 'augmentation meds-medication', words_dict_15, default_value="Other", empty_value="0")
+    data = flag_if_column_contains_any_value(data,
+        column_name="augmentation meds-medication",
+        target_values=["MISOPROSTOL"],
+        result_col="misoprostol_yes/no"
+    )
+    data = flag_if_column_contains_any_value(data,
+        column_name="augmentation meds-medication",
+        target_values=["OXYTOCIN"],
+        result_col="pitocin_yes/no"
+    )
+
+    data = flag_if_column_contains_any_value(data,
+        column_name="balloon/propes-measurement",
+        target_values=["פרופס"],
+        result_col="propes_yes/no"
+    )
+
+    data = flag_if_column_contains_any_value(data,
+        column_name="balloon/propes-measurement",
+        target_values=["בלון"],
+        result_col="balloon_yes/no"
+    )
     
-    
+    data = columns_contain_nonzero_nonfalse(data,
+        column_names=["propes_yes/no", "misoprostol_yes/no"],
+        result_col="induction_yes/no"
+    )
+
+
     #בלון/פרופס
     words_dict_16 = {
         "1": ["הכנסת בלון"],
@@ -2553,7 +2626,7 @@ def main():
                                match_return=1,
                                no_match_return=0)
     
-    
+
     #זיהום לאחר לידה
     words_dict_17 = {
         "1": ["wound", "cellulitis"],
