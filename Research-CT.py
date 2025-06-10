@@ -2365,22 +2365,22 @@ def main():
 
      # Apply culture extraction processing.
     data = process_other_cultures(data, 'other cultures-collection date-days from reference_1', 'other cultures-organism detected_1', 'other cultures-specimen material_1', 
-                                      step=3, num_batches=10, result_samples='other_culture_samples_taken', 
-                                      result_organisms='other_culture_organisms_detected',
-                                      result_organism_categories='other_culture_organisms_category',
+                                      step=3, num_batches=10, result_samples='abscess_culture_samples_taken', 
+                                      result_organisms='abscess_culture_organisms_detected',
+                                      result_organism_categories='abscess_culture_organisms_category',
                                       organism_translation_dict=organism_dict, specimen_filter_keywords=['מורסה', 'פצע'])
     
-    data = remove_contaminant_and_count(data, 'other_culture_organisms_category', 'other_culture_Type_of_growth', delimiter=',', default_value=0, contaminant='Contaminants (CONS etc.)')
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
-    data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
+    data = remove_contaminant_and_count(data, 'abscess_culture_organisms_category', 'abscess_culture_Type_of_growth', delimiter=',', default_value=0, contaminant='Contaminants (CONS etc.)')
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Non_hemolytic_Strep_yes_or_no', ['Non-hemolitic Strep (viridans + enterococci)'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Enterobacterales_yes_or_no', ['Enterobacterales'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_GBS_yes_or_no', ['GBS'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Anaerobes_yes_or_no', ['Anaerobes'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Other_Gram_Negatives_yes_or_no', ['Other Gram Negatives'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Vaginal_Flora_yes_or_no', ['Vaginal Flora'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Staph_Aureus_yes_or_no', ['Staph Aureus'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Listeria_yes_or_no', ['Listeria'], delimiter=',', empty_value=0)
+    data = does_column_contain_string_in_category_list(data, 'abscess_culture_organisms_category', 'abscess_organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
     
     ## Antibiotics taken yes/no
     data = containswords_result_exists(data, 'antibiotics-medication_1', ['AMPICILLIN'], 3, 108, 'Antibiotics_given_Ampicillin')
