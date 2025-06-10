@@ -1233,10 +1233,10 @@ def process_length_of_fever(data, date_col, temp_col, step, num_batches, result_
     return data
 
 
-def process_other_cultures(data, collection_date_col, organism_col, specimen_col, step, num_batches, result_samples, result_organisms, result_organism_categories=None, organism_translation_dict=None):
+def process_other_cultures(data, collection_date_col, organism_col, specimen_col, step, num_batches, result_samples, result_organisms, result_organism_categories=None, organism_translation_dict=None, specimen_filter_keywords=None):
     """
     Extract unique sample types and detected organisms from multiple culture test columns.
-    If organism_translation_dict is provided, generate an additional column with mapped organism categories.
+    Only processes batches where the specimen column contains a keyword (if provided).
     """
     collection_idx = column_name_to_index(data, collection_date_col)
     organism_idx = column_name_to_index(data, organism_col)
@@ -1250,8 +1250,13 @@ def process_other_cultures(data, collection_date_col, organism_col, specimen_col
             org_i = organism_idx + (i * step)
             spec_i = specimen_idx + (i * step)
 
+            spec_val = str(row.iloc[spec_i]).strip().lower() if pd.notna(row.iloc[spec_i]) else ""
+
+            if specimen_filter_keywords and not any(kw.lower() in spec_val for kw in specimen_filter_keywords):
+                continue  # skip this batch
+
             if pd.notna(row.iloc[date_i]) and str(row.iloc[date_i]).strip() != "":
-                if pd.notna(row.iloc[spec_i]) and str(row.iloc[spec_i]).strip() != "":
+                if spec_val:
                     samples.add(str(row.iloc[spec_i]))
                 if pd.notna(row.iloc[org_i]) and str(row.iloc[org_i]).strip() != "":
                     organisms.add(str(row.iloc[org_i]))
@@ -2363,7 +2368,7 @@ def main():
                                       step=3, num_batches=10, result_samples='other_culture_samples_taken', 
                                       result_organisms='other_culture_organisms_detected',
                                       result_organism_categories='other_culture_organisms_category',
-                                      organism_translation_dict=organism_dict)
+                                      organism_translation_dict=organism_dict, specimen_filter_keywords=['מורסה', 'פצע'])
     
     data = remove_contaminant_and_count(data, 'other_culture_organisms_category', 'other_culture_Type_of_growth', delimiter=',', default_value=0, contaminant='Contaminants (CONS etc.)')
     data = does_column_contain_string_in_category_list(data, 'other_culture_organisms_category', 'other_organisms_Contaminants_yes_or_no', ['Contaminants (CONS etc.)'], delimiter=',', empty_value=0)
