@@ -2356,7 +2356,7 @@ def main():
     data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'blood_organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
     
      ## other cultures taken yes/no
-    data = containswords_result_exists(data, 'other cultures-specimen material_1', ['ביופסיה', 'מורסה', 'אחר', 'פצע', 'שליה','שיליה'], 3, 13, 'other_culture_taken')
+    data = containswords_result_exists(data, 'other cultures-specimen material_1', ['מורסה', 'פצע'], 3, 13, 'abscess_culture_taken')
 
      # Apply culture extraction processing.
     data = process_other_cultures(data, 'other cultures-collection date-days from reference_1', 'other cultures-organism detected_1', 'other cultures-specimen material_1', 
@@ -2476,8 +2476,8 @@ def main():
     
     #*עמודה - בשם amniotic fluid color
     words_dict_5 = {
-        "1": ["נקיים", "דמיים", "לא נצפו מים", "no value"],
-        "2": ["מקוניום", "מקוניום דליל", "מקוניום סמיך"]
+        "0": ["נקיים", "דמיים", "לא נצפו מים", "no value"],
+        "1": ["מקוניום", "מקוניום דליל", "מקוניום סמיך"]
     }
     update_column_with_values(data, 'rom description-amniotic fluid color', words_dict_5, default_value="Other")
 
@@ -2655,14 +2655,14 @@ def main():
     
 
     #זיהום לאחר לידה
-    words_dict_17 = {
-        "1": ["wound", "cellulitis"],
-        "2": ["pyelonephritis", "urinary", "uti"],
-        "3": ["mastitis"],
-        "4": ["sepsis", "septic", "shock"],
-        "5": ["pneumonia", "encephalitis", "meningitis"]
-    }
-    update_column_with_values(data, 'maternal infection post partum-diagnosis', words_dict_17, default_value="Other", empty_value="0")
+    #words_dict_17 = {
+     #   "1": ["wound", "cellulitis"],
+      #  "2": ["pyelonephritis", "urinary", "uti"],
+       # "3": ["mastitis"],
+        #"4": ["sepsis", "septic", "shock"],
+        #"5": ["pneumonia", "encephalitis", "meningitis"]
+    #}
+    #update_column_with_values(data, 'maternal infection post partum-diagnosis', words_dict_17, default_value="Other", empty_value="0")
     
     
     # surgical complications
@@ -2797,7 +2797,7 @@ def main():
         ["AUGMENTIN BID", "AUGMENTIN"],
         ["GENTAMICIN", "GENTAMYCIN"],
         ["FLAGYL", "METRONIDAZOLE"],
-        ["ROCEPHIN","CEFTRIAXONE"],
+        ["ROCEPHIN","CEFTRIAXONE", "CefTRIAXone"],
         ["DALACIN", "CLINDAMYCIN"]
     ]
     combos = [
@@ -2809,10 +2809,12 @@ def main():
         {"CLINDAMYCIN", "GENTAMYCIN"},
         {"ROCEPHIN", "FLAGYL"},
         {"CEFTRIAXONE", "FLAGYL"},
+        {"CefTRIAXone", "FLAGYL"},
         {"ROCEPHIN", "METRONIDAZOLE"},
-        {"CEFTRIAXONE", "METRONIDAZOLE"}
+        {"CEFTRIAXONE", "METRONIDAZOLE"},
+        {"CefTRIAXone", "METRONIDAZOLE"}
     ] # Counts pairs seen in the concatenated abx given + adds number of left over (unique) abx
-    data = detect_combination_antibiotics(data, "concat_antibiotics_given", "has_2plus_abx", "has_3plus_abx", combos, synonyms, ignored = ["PENICILLIN"])
+    data = detect_combination_antibiotics(data, "concat_antibiotics_given", "has_2plus_abx", "has_3plus_abx", combos, synonyms, ignored = ["PENICILLIN", "PENICILLIN G SODIUM"])
 
     summary = summarize_keys_and_values_in_raw_map(
         data=data,
@@ -2843,6 +2845,12 @@ def main():
                               result_col='uterotonics_received',
                               cytotec_words=cytotec_words,
                               methergin_words=methergin_words)
+
+    # create uterotonic yes/no column
+    data = create_column_from_value_map(data, source_column='uterotonics_received',
+            new_column='uterotonics yes/no',
+            value_map={0: 0, 1: 1, 2: 1, 3: 1},default_value=""
+    )
 
     # Apply full dilation check
     data = categorize_full_dilation(data, 'full dilation at surgery-value numeric', 'full_dilation_at_surgery_yes_or_no')
@@ -3163,20 +3171,20 @@ def main():
 
    #abscess_cultures
    # 1. Flag whether abscess culture was taken
-    data = create_indicator_column_by_keyword(data, 'other_culture_samples_taken', 'מורסה', 'abscess_culture_was_taken_yes_no')
+   # data = create_indicator_column_by_keyword(data, 'other_culture_samples_taken', 'מורסה', 'abscess_culture_was_taken_yes_no')
 
     # 2. Copy organism name, category, and growth type from existing 'other_culture_' columns where 'מורסה' is mentioned
-    data['abscess_culture_organism_name'] = data.apply(
-        lambda row: row['other_culture_organisms_detected'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
-    )
+    #data['abscess_culture_organism_name'] = data.apply(
+     #   lambda row: row['other_culture_organisms_detected'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+    #)
 
-    data['abscess_culture_organism_category'] = data.apply(
-        lambda row: row['other_culture_organisms_category'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
-    )
+    #data['abscess_culture_organism_category'] = data.apply(
+    #     lambda row: row['other_culture_organisms_category'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+    #)
 
-    data['abscess_culture_type_of_growth'] = data.apply(
-        lambda row: row['other_culture_Type_of_growth'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
-    )
+    #data['abscess_culture_type_of_growth'] = data.apply(
+     #   lambda row: row['other_culture_Type_of_growth'] if 'מורסה' in str(row['other_culture_samples_taken']) else "", axis=1
+    #)
 
 
 
@@ -3202,7 +3210,7 @@ def main():
         'hemostasis-value numeric',
         'hemostasis-code',
         'cs info-date of documentation~cs info-secondary indication',
-        'hospitalization before delivery (hrp) - length of stay (days)',
+        #'hospitalization before delivery (hrp) - length of stay (days)',
         'scrub-value textual~surgery reports-documenting date',
         'packed cells before-date administered-days from reference_1~packed cells after-medication_13',
         'uterotonics-date administered-days from reference_1~uterotonics-medication_2',
@@ -3223,7 +3231,7 @@ def main():
         'fever_max 38-43 after delivery-date of measurement',
         'pprom diagnosis-date of documentation',
         'pprom diagnosis-diagnosis',
-        #'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal pph-diagnosis',
+        'maternal pregestational hypertension-maternal pregestational hypertension-diagnosis~maternal infection post partum-diagnosis',
         'crp at 1st imaging 24h-collection date-hours from reference',
         'plt at 1st imaging 24h-collection date-hours from reference',
         'wbc at 1st imaging 24h-collection date-hours from reference',
@@ -3232,8 +3240,17 @@ def main():
         'antibiotics-date administered-days from reference_1~antibiotics-medication_108',
         'surgery_time_category_label',
         #'imaging_number-count',
-        'surgical complications-department~surgery after delivery-department_7',
-        #'gbs status-gbs in urine~gbs diagnosis-diagnosis'
+        'surgical complications-procedure~surgery after delivery-department_7',
+        #'gbs status-gbs in urine~gbs diagnosis-diagnosis',
+        'cs info-main indication~surgery info-procedure',
+        'readmission-admitting department',
+        'augmentation meds-medication',
+        'balloon/propes-measurement',
+        'gbs status-gbs in urine~gbs diagnosis-diagnosis',
+        #'blood_culture_organisms~blood_culture_organisms_category',
+        'has_multiple_antibiotics',
+        'postpartum_surgeries_names'
+        
   
      ])
     #data = add_row_index_column(data, col_name="CT_Index")
