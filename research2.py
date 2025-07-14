@@ -103,11 +103,21 @@ def update_dataframe(originalData, col1, words1, logical_op, col2, words2, col3,
     print(f"done working on new column: {result_column_name}")
     return data
 
-def remove_rows_below_threshold(data, column_name, threshold):
-    return data[data.iloc[:, column_name_to_index(data, column_name)] >= threshold]
+#def remove_rows_below_threshold(data, column_name, threshold):
+    #return data[data.iloc[:, column_name_to_index(data, column_name)] >= threshold]
     
+def remove_rows_below_threshold(data, column_name, threshold):
+    column_index = column_name_to_index(data, column_name)
+    numeric_series = pd.to_numeric(data.iloc[:, column_index], errors='coerce')  # Convert to float, invalid strings become NaN
+    return data[numeric_series >= threshold]
+    
+#def remove_rows_above_threshold(data, column_name, threshold):
+    #return data[data.iloc[:, column_name_to_index(data, column_name)] <= threshold]
+
 def remove_rows_above_threshold(data, column_name, threshold):
-    return data[data.iloc[:, column_name_to_index(data, column_name)] <= threshold]
+    column_index = column_name_to_index(data, column_name)
+    numeric_series = pd.to_numeric(data.iloc[:, column_index], errors='coerce')
+    return data[numeric_series <= threshold]
 
 def remove_rows_if_contains(data, column_name, words):
     return data[~data.iloc[:, column_name_to_index(data, column_name)].astype(str).str.lower().apply(lambda x: any(word.lower() in x for word in words))]
@@ -124,7 +134,7 @@ def update_column_with_values(data, column_name, words_dict, default_value="0", 
             if any(word.lower() in cell_value_lower for word in words):
                 return key
         if cell_value != "":
-            print(f"Failed to translate dictionary value! Col:{column_letter} Value:{cell_value}")
+            print(f"Failed to translate dictionary value! Col:{column_name} Value:{cell_value}")
             return default_value  # Use the specified default value if no matches found
         return ""
 
@@ -764,6 +774,10 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
     # Process each row (patient)
     for idx, row in data.iterrows():
         patient_id = row[patient_id_column]
+        if patient_id != "416312D000000000A1641D1357E4E3A61A6B32BC96F2B4C239044DF1832D6C1190AB6BA37DA0721B":
+            continue
+        
+        print("HERE !!!!!!!!!!!!!!!  ", patient_id)
         patient_row = {field: row[field] for field in additional_fields}  # Add additional fields
         patient_row["PatientId"] = patient_id
 
@@ -788,27 +802,34 @@ def generate_patient_specific_dataset(data, start_column, columns_per_set, num_t
             antibiotic_value = row.iloc[antibiotic_index] if pd.notna(row.iloc[antibiotic_index]) and row.iloc[antibiotic_index] != "" else None
             susceptibility_value = row.iloc[susceptibility_index] if pd.notna(row.iloc[susceptibility_index]) and row.iloc[susceptibility_index] != "" else None
             alternative_virus_value = row.iloc[alternative_virus_index] if pd.notna(row.iloc[alternative_virus_index]) and row.iloc[alternative_virus_index] != "" else None
-            print(f"here: {virus_value} ? {row.iloc[virus_index]} ? {virus_index} - {antibiotic_value} - {susceptibility_value} - {alternative_virus_value}")
+
             # Skip if Virus key (Col2) is empty
             if not virus_value:
+                #print("1")
                 continue
 
             # Add alternative virus name to the map
             if virus_value not in virus_map and alternative_virus_value:
                 virus_map[virus_value] = alternative_virus_value
+                print("2")
 
             # Handle empty Antibiotic key (Col1)
             if not antibiotic_value:
                 # Ensure the virus is added to the patient map with no antibiotic key
+                print("3")
                 if virus_value not in patient_map:
                     patient_map[virus_value] = {}
+                    print("4")
                 continue  # Skip the rest of the logic for this tuple
 
             # Append Susceptibility value to the Virus→Antibiotic map, if it's non-empty
             if susceptibility_value:
+                print("5")
                 if antibiotic_value not in patient_map[virus_value]:
+                    print("6")
                     patient_map[virus_value][antibiotic_value] = susceptibility_value
                 else:
+                    print("6.2")
                     patient_map[virus_value][antibiotic_value] += f", {susceptibility_value}"
 
         # Create rows for the new dataset
@@ -1068,6 +1089,45 @@ def split_and_save_csv(data, column_name, full_output_file, csv_file_under_38, c
         
     except Exception as e:
         print(f"An error occurred while saving the files: {e}")
+        
+        
+   
+def filter_newborn_data_by_existing_patients(newborn_filepath, current_data, output_filepath="filtered_newborn_data.csv"):
+    """
+    Loads a newborn data file and retains only rows where 'patient ID - mother' 
+    exists in the 'patient id' column of the current dataset.
+
+    Args:
+    newborn_filepath (str): Path to the newborn data CSV file.
+    current_data (pd.DataFrame): The DataFrame containing the original patient list.
+    output_filepath (str): Optional. Where to save the filtered newborn data.
+
+    Returns:
+    pd.DataFrame: Filtered newborn data.
+    """
+    # Load newborn data
+    newborn_data = load_data(newborn_filepath)
+    if newborn_data is None:
+        print("Failed to load newborn data.")
+        return None
+
+    original_count = len(newborn_data)
+
+    # Filter the data
+    filtered_data = newborn_data[newborn_data['cohort reference event-patient id (mother)'].isin(current_data['patient id'])]
+
+    final_count = len(filtered_data)
+    deleted_count = original_count - final_count
+
+    print(f"Original rows: {original_count}")
+    print(f"Deleted rows: {deleted_count}")
+    print(f"Final rows: {final_count}")
+
+    # Save the filtered result
+    filtered_data.to_csv(output_filepath, index=False, encoding='utf-8')
+    print(f"Filtered newborn data saved to {output_filepath}")
+
+    return filtered_data
 
 
 def main():
@@ -1088,8 +1148,8 @@ def main():
     data = remove_rows_if_contains(over_threshold_data, 'birth-type of labor onset', ['misoprostol', 'termination of pregnancy','IUFD'])
     print(len(over_threshold_data)-len(data), " rows with misoprostol/termination removed")
 
-    data = remove_rows_above_threshold(data, 'birth-fetus count', 1)
-    print(len(over_threshold_data)-len(data), " rows with fetus count above 1 removed")
+    #data = remove_rows_above_threshold(data, 'birth-fetus count', 1)
+    #print(len(over_threshold_data)-len(data), " rows with fetus count above 1 removed")
 
 
     ## Cultures taken yes/no Follow by Positive yes/no
@@ -1329,14 +1389,14 @@ def main():
     #data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_treatment_yes_no', 0, above=1, below=0, empty_value='')
     
     # Check if the cell value in 'penicillin/clindamycin timing calculated' is negative, and return 1 to a new column if it is. 
-    data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_before_fever_yes_no', 0, above=0, below=1, empty_value=0)
+    #data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_before_fever_yes_no', 0, above=0, below=1, empty_value=0)
     # Check if the cell value in 'penicillin/clindamycin timing calculated', and return 1 to a new column if it is. 
     #data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_after_fever_yes_no', 0, above=1, below=0, empty_value='')
     
     # Check if the cell value in 'ampicillin timing calculated' is negative, and return 1 to a new column if it is. 
     data = cutoff_number(data, 'ampicillin timing calculated', 'ampicillin_before_fever_yes_no', 0, above=0, below=1, empty_value=0)
     # Check if the cell value in 'ampicillin timing calculated', and return 1 to a new column if it is. 
-    #data = cutoff_number(data, 'ampicillin timing calculated', 'ampicillin_after_fever_yes_no', 0, above=1, below=0, empty_value='')
+    data = cutoff_number(data, 'ampicillin timing calculated', 'ampicillin_after_fever_yes_no', 0, above=1, below=0, empty_value='')
     
     # Flip the sign of numeric values in column 'ANA'
     #data = flip_sign(data, 'second stage length calculated')
@@ -1398,6 +1458,8 @@ def main():
     
     #data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
     generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=5 ,num_tuples=65, output_file="heatmap.csv")
+    
+    filtered_newborn_data = filter_newborn_data_by_existing_patients("newborn_input.csv", data)
 
     data = concat_values_across_batches(data, "antibiotics-medication_1", 3, 108, "concat_antibiotics_given" )  # antibiotics-medication_1 3 X 108
     result_df = generate_patient_specific_dataset(
