@@ -902,6 +902,72 @@ def concat_values_across_batches(data, nth_column, step_size, num_steps, output_
     print(f"Column '{output_column_name}' added with concatenated values.")
     return data
 
+def add_baby_info_to_mothers(
+    mothers_df,
+    babies_file_path,
+    mother_baby_id_columns,
+    babies_id_column="patient_id",
+    babies_prefix="baby_"
+):
+    """
+    For each mother in mothers_df, looks up baby info from a babies file and adds columns
+    for each baby's details, prefixed by baby index.
+
+    mothers_df: DataFrame with mother info and baby ID columns
+    babies_file_path: path to babies file (CSV)
+    mother_baby_id_columns: list of 3 columns in mothers_df that contain baby IDs
+    babies_id_column: column name in babies file containing the unique baby ID
+    babies_prefix: prefix to add to inserted columns (default "baby_")
+
+    Returns: mothers_df with new baby info columns added
+    """
+    babies_df = load_data(babies_file_path)
+    babies_df = babies_df.astype(str)
+    babies_df = babies_df.set_index(babies_id_column)
+    babies_columns = [col for col in babies_df.columns if col != babies_id_column]
+
+    matched_babies = 0
+    matched_mothers = 0
+
+    # Will mark True for each mother that had at least one match
+    mother_matched_any = []
+
+    for i, colname in enumerate(mother_baby_id_columns, 1):
+        id_col = colname
+        prefix = f"{babies_prefix}{i}_"
+        for baby_col in babies_columns:
+            new_col = f"{prefix}{baby_col}"
+            mothers_df[new_col] = ""
+
+    def add_baby_data_for_mother(row):
+        matched_this_mother = False
+        baby_results = {}
+        for i, colname in enumerate(mother_baby_id_columns, 1):
+            prefix = f"{babies_prefix}{i}_"
+            baby_id = str(row[colname]).strip()
+            if not baby_id or baby_id.lower() in ("nan", "none"):
+                for baby_col in babies_columns:
+                    baby_results[f"{prefix}{baby_col}"] = ""
+                continue
+            if baby_id in babies_df.index:
+                nonlocal matched_babies
+                matched_babies += 1
+                matched_this_mother = True
+                for baby_col in babies_columns:
+                    baby_results[f"{prefix}{baby_col}"] = babies_df.at[baby_id, baby_col]
+            else:
+                for baby_col in babies_columns:
+                    baby_results[f"{prefix}{baby_col}"] = ""
+        mother_matched_any.append(matched_this_mother)
+        return pd.Series(baby_results)
+
+    baby_data = mothers_df.apply(add_baby_data_for_mother, axis=1)
+    mothers_df.update(baby_data)
+    matched_mothers = sum(mother_matched_any)
+
+    print(f"Matched {matched_babies} babies to {matched_mothers} mothers (patients).")
+    return mothers_df
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -1471,6 +1537,14 @@ def main():
         additional_fields=["concat_antibiotics_given", "birth-gestational age", "blood_culture_organisms", "blood_culture_organisms_category", "Blood_culture_Type_of_growth"],
         output_file="patient_specific_dataset.csv"
     )
+
+    data = add_baby_info_to_mothers(
+        mothers_df=data,
+        babies_file_path="newborns.csv",  # path to your babies file
+        mother_baby_id_columns=["baby_id_1", "baby_id_2", "baby_id_3"],  # adjust as needed
+        babies_id_column="patient_id"   # adjust as needed
+    )
+
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
