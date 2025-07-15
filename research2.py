@@ -968,6 +968,41 @@ def add_baby_info_to_mothers(
     print(f"Matched {matched_babies} babies to {matched_mothers} mothers (patients).")
     return mothers_df
 
+def add_days_between_flag(data, birth_col, death_col, result_col):
+    """
+    Adds a column to the dataframe: 1 if days between birth and death are 0-28 inclusive, else 0.
+    Handles date strings and numeric days.
+    """
+    def parse_date(val):
+        # Try to parse as date, fallback to float if possible
+        try:
+            return pd.to_datetime(val)
+        except Exception:
+            try:
+                return float(val)
+            except Exception:
+                return pd.NaT  # Not a Time / missing
+    
+    def check_days(row):
+        b = row[birth_col]
+        d = row[death_col]
+        b_parsed = parse_date(b)
+        d_parsed = parse_date(d)
+        if pd.isna(b_parsed) or pd.isna(d_parsed):
+            return 0
+        # If both parsed as Timestamps, subtract
+        if isinstance(b_parsed, pd.Timestamp) and isinstance(d_parsed, pd.Timestamp):
+            delta = (d_parsed - b_parsed).days
+        else:
+            try:
+                delta = float(d_parsed) - float(b_parsed)
+            except Exception:
+                return 0
+        return 1 if (delta >= 0 and delta <= 28) else 0
+
+    data[result_col] = data.apply(check_days, axis=1)
+    return data
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -1572,6 +1607,14 @@ def main():
     data = is_empty(data, 'baby_1_sepsis-diagnosis', 'baby_1_sepsis_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'baby_1_mechanical ventilation-diagnosis', 'baby_1_mechanical ventilation_yes_or_no', value_empty=0, value_not_empty=1)
     
+    data = add_days_between_flag(
+        data,
+        birth_col="baby_1_date of birth",
+        death_col="baby_1_date of death",
+        result_col="neonetal_death_yesno"
+    )
+
+
     #data = is_empty(data, 'baby_2_transfer-department', 'baby_2_NICU_yes_or_no', value_empty=0, value_not_empty=1)
     #data = is_empty(data, 'baby_2_sga-diagnosis', 'baby_2_SGA_yes_or_no', value_empty=0, value_not_empty=1)     
     #data = is_empty(data, 'baby_2_lga-diagnosis', 'baby_2_LGA_yes_or_no', value_empty=0, value_not_empty=1)
