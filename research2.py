@@ -1753,8 +1753,8 @@ def main():
         ])
 
 
-    ##save_data(data, output_filepath)
-    split_and_save_csv(data, 'fever temperature numeric_max 37.5-43 before delivery-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
+    save_data(data, output_filepath)
+    #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43 before delivery-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
 
 if __name__ == "__main__":
     main()
