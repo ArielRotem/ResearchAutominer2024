@@ -1214,8 +1214,8 @@ def main():
     data = remove_rows_if_contains(over_threshold_data, 'birth-type of labor onset', ['misoprostol', 'termination of pregnancy','IUFD'])
     print(len(over_threshold_data)-len(data), " rows with misoprostol/termination removed")
 
-    #data = remove_rows_above_threshold(data, 'birth-fetus count', 1)
-    #print(len(over_threshold_data)-len(data), " rows with fetus count above 1 removed")
+    data = remove_rows_above_threshold(data, 'birth-fetus count', 1)
+    print(len(over_threshold_data)-len(data), " rows with fetus count above 1 removed")
 
 
     ## Cultures taken yes/no Follow by Positive yes/no
@@ -1309,7 +1309,9 @@ def main():
         "0": ["No"],
         "1": ["Yes"]
     }
-    update_column_with_values(data, 'newborn sheet-died at pregnancy/birth', words_dict_3, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-died at pregnancy/birth_1', words_dict_3, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-died at pregnancy/birth_2', words_dict_3, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-died at pregnancy/birth_3', words_dict_3, default_value="Other")
 
 
     #*עמודה AD - בשם newborn gender
@@ -1317,11 +1319,15 @@ def main():
         "1": ["Female", "נקבה"],
         "2": ["Male", "זכר"]
     }
-    update_column_with_values(data, 'newborn sheet-gender', words_dict_4, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-gender_1', words_dict_4, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-gender_2', words_dict_4, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-gender_3', words_dict_4, default_value="Other")
    
 
     #*עמודה AG - בשם newborn sent to intensive care
-    update_column_with_values(data, 'newborn sheet-sent to intensive care', words_dict_3, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-sent to intensive care_1', words_dict_3, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-sent to intensive care_2', words_dict_3, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-sent to intensive care_3', words_dict_3, default_value="Other")
    
     
      #*עמודה AH - בשם Mode of delivery
@@ -1331,7 +1337,9 @@ def main():
         "2": ["קיסרי"]
       
     }
-    update_column_with_values(data, 'newborn sheet-delivery type', words_dict_12, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-delivery type_1', words_dict_12, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-delivery type_2', words_dict_12, default_value="Other")
+    update_column_with_values(data, 'newborn sheet-delivery type_3', words_dict_12, default_value="Other")
     
     #*עמודה AU - בשם amniotic fluid color
     words_dict_5 = {
@@ -1395,6 +1403,7 @@ def main():
         
     }
     update_column_with_values(data, 'surgery indication-main indication', words_dict_11, default_value="Other")
+    update_column_with_values(data, 'surgery indication-secondary indication', words_dict_11, default_value="Other")
     
     ## Hysterectomy yes/no
     data = containswords_result_exists(data, 'surgery before delivery-procedure_1', ['HYSTERECTOMY'], 4, 4, 'Hysterectomy_done_yes_or_no')
@@ -1450,14 +1459,14 @@ def main():
     data = filter_numbers(data, 'rom description-date of membranes rupture-hours from reference',lowerThan=0, higherThan=2500)
     
     # Check if the cell value in 'first antibiotics timing' is negative, and return 1 to a new column if it is. 
-    #data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_prophylaxis_yes_no', 0, above=0, below=1, empty_value='')
+    data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_prophylaxis_yes_no', 0, above=0, below=1, empty_value='')
     # Check if the cell value in 'first antibiotics timing' is positive, and return 1 to a new column if it is. 
-    #data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_treatment_yes_no', 0, above=1, below=0, empty_value='')
+    data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_treatment_yes_no', 0, above=1, below=0, empty_value='')
     
     # Check if the cell value in 'penicillin/clindamycin timing calculated' is negative, and return 1 to a new column if it is. 
-    #data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_before_fever_yes_no', 0, above=0, below=1, empty_value=0)
+    data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_before_fever_yes_no', 0, above=0, below=1, empty_value=0)
     # Check if the cell value in 'penicillin/clindamycin timing calculated', and return 1 to a new column if it is. 
-    #data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_after_fever_yes_no', 0, above=1, below=0, empty_value='')
+    data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_after_fever_yes_no', 0, above=1, below=0, empty_value='')
     
     # Check if the cell value in 'ampicillin timing calculated' is negative, and return 1 to a new column if it is. 
     data = cutoff_number(data, 'ampicillin timing calculated', 'ampicillin_before_fever_yes_no', 0, above=0, below=1, empty_value=0)
@@ -1491,7 +1500,7 @@ def main():
     data = cutoff_number(data, 'rom description-date of membranes rupture-hours from reference', 'duration_of_rom_over_18h', 18, above=1, below=0, empty_value='')
 
     # Flip the sign of numeric values in column 'BA'
-    data = flip_sign(data, 'fever temperature numeric_max 37.5-43-date of measurement-hours from reference')
+    data = flip_sign(data, 'fever temperature numeric_max 37.5-43 before delivery-date of measurement-hours from reference')
 
     data = combine_columns(data, ['surgery before delivery-procedure_1', 'surgery before delivery-procedure_2'], 'Surgery_before_delivery', delimiter=', ')
     data = combine_columns(data, ['surgery after delivery-procedure_1', 'surgery after delivery-procedure_2'], 'Surgery_after_delivery', delimiter=', ')
@@ -1518,16 +1527,16 @@ def main():
     print(len(data)-len(filtered_labor_data), " rows without blood culture taken removed")
     data = filtered_labor_data
     
-    over_38_data = remove_rows_below_threshold(data, 'fever temperature numeric_max 37.5-43-numeric result', 38)
+    over_38_data = remove_rows_below_threshold(data, 'fever temperature numeric_max 37.5-43 before delivery-numeric result', 38)
     print(len(data)-len(over_38_data), " rows below Temp 38 removed")
     data = over_38_data
     
     #data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
     generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=5 ,num_tuples=65, output_file="heatmap.csv")
     
-    filtered_newborn_data = filter_newborn_data_by_existing_patients("newborn_input.csv", data)
+    #filtered_newborn_data = filter_newborn_data_by_existing_patients("newborn_input.csv", data)
 
-    data = concat_values_across_batches(data, "antibiotics-medication_1", 3, 108, "concat_antibiotics_given" )  # antibiotics-medication_1 3 X 108
+    data = concat_values_across_batches(data, "antibiotics-medication_1", 3, 88, "concat_antibiotics_given" )  # antibiotics-medication_1 3 X 108
     result_df = generate_patient_specific_dataset(
         data=data,
         start_column="organisms susceptability-antibiotic_1",
@@ -1540,11 +1549,62 @@ def main():
 
     data = add_baby_info_to_mothers(
         mothers_df=data,
-        babies_file_path="newborns.csv",  # path to your babies file
-        mother_baby_id_columns=["baby_id_1", "baby_id_2", "baby_id_3"],  # adjust as needed
-        babies_id_column="patient_id"   # adjust as needed
+        babies_file_path="newborn_input.csv",  # path to your babies file
+        mother_baby_id_columns=["newborn sheet-child internal patient id_1", "newborn sheet-child internal patient id_2", "newborn sheet-child internal patient id_3"],  # adjust as needed
+        babies_id_column="patient id"   # adjust as needed
     )
 
+     # Check if the cell value in newborn diagnosis column is empty or not, and returns 1 if its not, 0 if it is.
+    data = is_empty(data, 'baby_1_transfer-department', 'baby_1_NICU_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_sga-diagnosis', 'baby_1_SGA_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_lga-diagnosis', 'baby_1_LGA_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_meconium aspiration-diagnosis', 'baby_1_meconium aspiration_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_meconium -diagnosis', 'baby_1_meconium_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_hypoglycemia-diagnosis', 'baby_1_hypoglycemia_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_jaundice-diagnosis', 'baby_1_jaundice_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_rds-diagnosis', 'baby_1_RDS_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_ivh-diagnosis', 'baby_1_IVH_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_periventricular leukomalacia -diagnosis', 'baby_1_PVL_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_bronchopulmonary dysplasia -diagnosis', 'baby_1_BPD_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_necrotizing enterocolitis -diagnosis', 'baby_1_NEC_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_seizures-diagnosis', 'baby_1_seizures_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_hypoxic ischemic encephalopathy -diagnosis', 'baby_1_HIE_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_sepsis-diagnosis', 'baby_1_sepsis_yes_or_no', value_empty=0, value_not_empty=1)
+    data = is_empty(data, 'baby_1_mechanical ventilation-diagnosis', 'baby_1_mechanical ventilation_yes_or_no', value_empty=0, value_not_empty=1)
+    
+    #data = is_empty(data, 'baby_2_transfer-department', 'baby_2_NICU_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_sga-diagnosis', 'baby_2_SGA_yes_or_no', value_empty=0, value_not_empty=1)     
+    #data = is_empty(data, 'baby_2_lga-diagnosis', 'baby_2_LGA_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_meconium aspiration-diagnosis', 'baby_2_meconium aspiration_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_meconium -diagnosis', 'baby_2_meconium_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_hypoglycemia-diagnosis', 'baby_2_hypoglycemia_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_jaundice-diagnosis', 'baby_2_jaundice_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_rds-diagnosis', 'baby_2_RDS_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_ivh-diagnosis', 'baby_2_IVH_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_periventricular leukomalacia -diagnosis', 'baby_2_PVL_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_bronchopulmonary dysplasia -diagnosis', 'baby_2_BPD_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_necrotizing enterocolitis -diagnosis', 'baby_2_NEC_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_seizures-diagnosis', 'baby_2_seizures_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_hypoxic ischemic encephalopathy -diagnosis', 'baby_2_HIE_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_mechanical ventilation-diagnosis', 'baby_2_mechanical ventilation_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_2_sepsis-diagnosis', 'baby_2_sepsis_yes_or_no', value_empty=0, value_not_empty=1)
+    
+    #data = is_empty(data, 'baby_3_transfer-department', 'baby_3_NICU_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_sga-diagnosis', 'baby_3_SGA_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_lga-diagnosis', 'baby_3_LGA_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_meconium aspiration-diagnosis', 'baby_3_meconium aspiration_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_meconium -diagnosis', 'baby_3_meconium_yes_or_no', value_empty=0, value_not_empty=1) 
+    #data = is_empty(data, 'baby_3_hypoglycemia-diagnosis', 'baby_3_hypoglycemia_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_jaundice-diagnosis', 'baby_3_jaundice_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_rds-diagnosis', 'baby_3_RDS_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_ivh-diagnosis', 'baby_3_IVH_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_periventricular leukomalacia -diagnosis', 'baby_3_PVL_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_bronchopulmonary dysplasia -diagnosis', 'baby_3_BPD_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_necrotizing enterocolitis -diagnosis', 'baby_3_NEC_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_seizures-diagnosis', 'baby_3_seizures_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_hypoxic ischemic encephalopathy -diagnosis', 'baby_3_HIE_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_sepsis-diagnosis', 'baby_3_sepsis_yes_or_no', value_empty=0, value_not_empty=1)
+    #data = is_empty(data, 'baby_3_mechanical ventilation-diagnosis', 'baby_3_mechanical ventilation_yes_or_no', value_empty=0, value_not_empty=1)
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
@@ -1553,13 +1613,18 @@ def main():
         'birth-date of first documentation - birth occurence',
         'hospitalization delivery-hospital admission date',
         'hospitalization delivery-hospital discharge date',
-        'newborn sheet-hospital admission date',
-        'newborn sheet-hospital discharge date',
+        'newborn sheet-hospital admission date_1',
+        'newborn sheet-hospital admission date_2',
+        'newborn sheet-hospital admission date_3',
+        'newborn sheet-hospital discharge date_1',
+        'newborn sheet-hospital discharge date_2',
+        'newborn sheet-hospital discharge date_3',
         'ph_arterial-numeric result_1~ph_arterial-lab test copy(1)_5',
         'bmi-date of measurement-days from reference',
         'second and third stage timeline-time of full dilation',
-        'gbs status-gbs in urine','gbs status-gbs vagina',
-        'fever temperature numeric_max 37.5-43-date of measurement',
+        'gbs status-gbs in urine',
+        'gbs status-gbs vagina',
+        'fever temperature numeric_max 37.5-43 before delivery-date of measurement',
         'onset of fever 38 until delivery-date of measurement-hours from reference',
         'onset of fever 38 until delivery-date of measurement',
         'wbc max-collection date-hours from reference',
@@ -1570,20 +1635,19 @@ def main():
         'readmission-hospital admission date',
         'readmission-hospital discharge date-days from reference',
         'readmission-hospital discharge date',
-        'cultures-test type_1~cultures-stain_61',
-        'surgery before delivery-date of procedure-days from reference_1~surgery before delivery-date of procedure copy_1',
-        'surgery before delivery-department_1~surgery after delivery-date of procedure copy_1',
-        'surgery after delivery-department_1~surgery after delivery-department_2',
+        'cultures-test type_1~cultures-stain_73',
+        'organisms susceptability-antibiotic_1~organisms susceptability-antibiotic panel_65',
+        'surgery before delivery-date of procedure-days from reference_1~surgery after delivery-department_4',
+        'antibiotics_first-date administered-hours from reference~antibiotics_first-medication',
+        'length of stay-room name~length of stay-room exit date',
         'imaging-exam performed (sps)_1~imaging-performed procedures_7',
-        'antibiotics-date administered-hours from reference_1~antibiotics-medication_108',
+        'antibiotics-date administered-hours from reference_1~antibiotics-medication_88',
         'surgery indication-type of surgery',
         'obstetric formula-number of abortions (ab)',
         'obstetric formula-number of births (p)',
         'obstetric formula-number of ectopic pregnancies (eup)',
         'obstetric formula-number of live children (lc)',
         'obstetric formula-number of pregnancies (g)',
-        'surgery before delivery-procedure_1',
-        'surgery after delivery-procedure_1',
         'maternal pregestaional diabetes-diagnosis',    
         'maternal gestational diabetes-diagnosis',  
         'maternal pregestational hypertension-diagnosis',   
@@ -1599,12 +1663,55 @@ def main():
         'ampicillin prophylaxis-medication',
         'penicillin/clindamycin timing calculated', 
         'ampicillin timing calculated',
-        'blood_culture_taken'
+        'blood_culture_taken',
+        'birth-child internal patient id',
+        'baby_1_date of birth',
+        'baby_1_reference occurrence number',
+        'baby_1_cohort reference event-age_at_event',
+        'baby_1_neonatal death -diagnosis~baby_1_death2-weight',
+        'baby_1_apgar -apgar 1~baby_1_apgar -apgar 10',
+        'baby_1_apgar -weight~baby_1_apgar -pregnancy age',
+        'baby_1_apgar -department~baby_1_apgar -transferred to intensive care',
+        'baby_1_apgar -documented birth time-days from reference~baby_1_apgar -patient id of newborn',
+        'baby_1_sga-diagnosis~baby_1_mechanical ventilation-diagnosis',
+        'baby_1_apgar -method of delivery',
+        'baby_1_apgar -birth rescue',
+        'baby_1_apgar -birth experience',
+        'baby_1_apgar -child number (in current delivery)',
+        'baby_2_date of birth',
+        'baby_2_reference occurrence number',
+        'baby_2_cohort reference event-age_at_event',
+        'baby_2_neonatal death -diagnosis~baby_2_death2-weight',
+        'baby_2_apgar -apgar 1~baby_2_apgar -apgar 10',
+        'baby_2_apgar -weight~baby_2_apgar -pregnancy age',
+        'baby_2_apgar -department~baby_2_apgar -transferred to intensive care',
+        'baby_2_apgar -documented birth time-days from reference~baby_2_apgar -patient id of newborn',
+        'baby_2_sga-diagnosis~baby_2_mechanical ventilation-diagnosis',
+        'baby_2_apgar -method of delivery',
+        'baby_2_apgar -birth rescue',
+        'baby_2_apgar -birth experience',
+        'baby_2_apgar -child number (in current delivery)',
+        'baby_3_date of birth',
+        'baby_3_reference occurrence number',
+        'baby_3_cohort reference event-age_at_event',
+        'baby_3_neonatal death -diagnosis~baby_3_death2-weight',
+        'baby_3_apgar -apgar 1~baby_3_apgar -apgar 10',
+        'baby_3_apgar -weight~baby_3_apgar -pregnancy age',
+        'baby_3_apgar -department~baby_3_apgar -transferred to intensive care',
+        'baby_3_apgar -documented birth time-days from reference~baby_3_apgar -patient id of newborn',
+        'baby_3_sga-diagnosis~baby_3_mechanical ventilation-diagnosis'
+        'baby_3_apgar -method of delivery',
+        'baby_3_apgar -birth rescue',
+        'baby_3_apgar -birth experience',
+        'baby_3_apgar -child number (in current delivery)',
+        #'baby_2_NICU_yes_or_no~baby_2_mechanical ventilation_yes_or_no',
+        #'baby_3_NICU_yes_or_no~baby_3_mechanical ventilation_yes_or_no'
+
         ])
 
 
     ##save_data(data, output_filepath)
-    split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
+    split_and_save_csv(data, 'fever temperature numeric_max 37.5-43 before delivery-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
 
 if __name__ == "__main__":
     main()
