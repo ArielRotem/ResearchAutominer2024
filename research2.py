@@ -1730,10 +1730,7 @@ def main():
     )
 
     # Example #3: Only Ceftriaxone given between delivery and first fever
-    data = flag_antibiotic_within_timeframe_idx(
-        data, 'high fever-date', 'antibiotics-medication_1', 'antibiotics-date administered-days from reference_1',
-        104, 3, 'delivert-date', 'ceftriaxone_between_surgery_and_fever', antibiotics_to_include=['Ceftriaxone', 'sheker kolshehu']
-    )
+    data = flag_antibiotic_within_timeframe_idx(data, 'high fever-date', 'antibiotics-medication_1', 'antibiotics-date administered-days from reference_1', 104, 3, 'delivert-date', 'ceftriaxone_between_surgery_and_fever', antibiotics_to_include=['Ceftriaxone', 'sheker kolshehu'])
 
 
     # Remove specified columns, including single columns and ranges
