@@ -1254,7 +1254,7 @@ def main():
 
 
     ## Cultures taken yes/no Follow by Positive yes/no
-    data = containswords_andor_containswords_result_exists(data, 'cultures-test type_1', ['דם'], 'OR','cultures-specimen material_1', ['דם'], 8, 74, 'blood_culture_taken')
+    data = containswords_andor_containswords_result_exists(data, 'cultures-test type_1', ['דם'], 'OR','cultures-specimen material_1', ['דם'], 8, 104, 'blood_culture_taken')
     ## blood culture positive != bateremia so this column is not relevent for now
     ##data = containswords_andor_containswords_and_nonempty_result_exists(data, '', ['דם'], 'OR','', ['דם'], '', 8, 74, 'blood_culture_positive')
     
@@ -1301,16 +1301,16 @@ def main():
     data = does_column_contain_string_in_category_list(data, 'blood_culture_organisms_category', 'Organisms_Other_yes_or_no', ['Other','Uncategorized'], delimiter=',', empty_value=0)
     
     ## Antibiotics taken yes/no
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['AMPICILLIN'], 3, 108, 'Antibiotics_given_Ampicillin')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['AMOXYCILLIN', 'AUGMENTIN'], 3, 108, 'Antibiotics_given_Augmentin')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['ERTAPENEM', 'MEROPENEM', 'MERONEM'], 3, 108, 'Antibiotics_given_Carbapenem')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['ROCEPHIN', 'CEFTRIAXONE'], 3, 108, 'Antibiotics_given_Ceftriaxone')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['CLINDAMYCIN', 'DALACIN'], 3, 108, 'Antibiotics_given_Clindamycin')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['GENTAMYCIN', 'GENTAMICIN'], 3, 108, 'Antibiotics_given_Gentamycin')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['FLAGYL', 'METRONIDAZOLE'], 3, 108, 'Antibiotics_given_Metronidazole')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['PENICILLIN'], 3, 108, 'Antibiotics_given_Penicillin')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['TAZOCIN', 'TAZOBACTAM+PIPERACILLIN'], 3, 108, 'Antibiotics_given_Tazocin')
-    data = containswords_result_exists(data, 'antibiotics-medication_1', ['AZENIL', 'NITROFURANTOIN', 'DOXYLIN','AMIKACIN'], 3, 108, 'Antibiotics_given_Other')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['AMPICILLIN'], 3, 103, 'Antibiotics_given_Ampicillin')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['AMOXYCILLIN', 'AUGMENTIN'], 3, 103, 'Antibiotics_given_Augmentin')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['ERTAPENEM', 'MEROPENEM', 'MERONEM'], 3, 103, 'Antibiotics_given_Carbapenem')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['ROCEPHIN', 'CEFTRIAXONE'], 3, 103, 'Antibiotics_given_Ceftriaxone')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['CLINDAMYCIN', 'DALACIN'], 3, 103, 'Antibiotics_given_Clindamycin')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['GENTAMYCIN', 'GENTAMICIN'], 3, 103, 'Antibiotics_given_Gentamycin')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['FLAGYL', 'METRONIDAZOLE'], 3, 103, 'Antibiotics_given_Metronidazole')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['PENICILLIN'], 3, 103, 'Antibiotics_given_Penicillin')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['TAZOCIN', 'TAZOBACTAM+PIPERACILLIN'], 3, 103, 'Antibiotics_given_Tazocin')
+    data = containswords_result_exists(data, 'antibiotics-medication_1', ['AZENIL', 'NITROFURANTOIN', 'DOXYLIN','AMIKACIN'], 3, 103, 'Antibiotics_given_Other')
 
     ## Dictionary mapping
     #*עמודה J - בשם type of labor onset
@@ -1326,15 +1326,15 @@ def main():
     #*עמודה L - בשם birth site  
     words_dict_1 = {
         "1": ["אוטו", "אמבולנס"],
-        "2": ["חדר לידה", "חדר ניתוח", "מחלקה אחרת", "מרכז לידה"]
+        "0": ["חדר לידה", "חדר ניתוח", "מחלקה אחרת", "מרכז לידה"]
     }
     update_column_with_values(data, 'birth-birth site', words_dict_1, default_value="Other")
 
 
     #*עמודה Q - בשם pregnancy type
     words_dict_2 = {
-        "2": ["IUI", "IVF", "IVF-PGD", "איקקלומין", "גונדוטרופינים", "גונדוטרופינים + IUI", "טיפול הורמונלי - גונדוטרופינים", "טיפול הורמונלי - כלומיפן", "כלומיפן + IUI", "לטרזול"],
-        "1": ["עצמוני"]
+        "1": ["IUI", "IVF", "IVF-PGD", "איקקלומין", "גונדוטרופינים", "גונדוטרופינים + IUI", "טיפול הורמונלי - גונדוטרופינים", "טיפול הורמונלי - כלומיפן", "כלומיפן + IUI", "לטרזול"],
+        "0": ["עצמוני"]
     }
     update_column_with_values(data, 'pregnancy_conceive-pregnancy type', words_dict_2, default_value="Other")
 
@@ -1378,8 +1378,8 @@ def main():
     
     #*עמודה AU - בשם amniotic fluid color
     words_dict_5 = {
-        "1": ["נקיים", "דמיים", "לא נצפו מים", "no value"],
-        "2": ["מקוניום", "מקוניום דליל", "מקוניום סמיך"]
+        "0": ["נקיים", "דמיים", "לא נצפו מים", "no value"],
+        "1": ["מקוניום", "מקוניום דליל", "מקוניום סמיך"]
     }
     update_column_with_values(data, 'rom description-amniotic fluid color', words_dict_5, default_value="Other")
 
@@ -1494,19 +1494,19 @@ def main():
     data = filter_numbers(data, 'rom description-date of membranes rupture-hours from reference',lowerThan=0, higherThan=2500)
     
     # Check if the cell value in 'first antibiotics timing' is negative, and return 1 to a new column if it is. 
-    data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_prophylaxis_yes_no', 0, above=0, below=1, empty_value='')
+    data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_prophylaxis_yes_no', 0, above=0, below=1, empty_value=0)
     # Check if the cell value in 'first antibiotics timing' is positive, and return 1 to a new column if it is. 
-    data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_treatment_yes_no', 0, above=1, below=0, empty_value='')
+    data = cutoff_number(data, 'first antibiotics timing calculated', 'Antibiotic_treatment_yes_no', 0, above=1, below=0, empty_value=0)
     
     # Check if the cell value in 'penicillin/clindamycin timing calculated' is negative, and return 1 to a new column if it is. 
     data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_before_fever_yes_no', 0, above=0, below=1, empty_value=0)
     # Check if the cell value in 'penicillin/clindamycin timing calculated', and return 1 to a new column if it is. 
-    data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_after_fever_yes_no', 0, above=1, below=0, empty_value='')
+    data = cutoff_number(data, 'penicillin/clindamycin timing calculated', 'penicillin/clindamycin_after_fever_yes_no', 0, above=1, below=0, empty_value=0)
     
     # Check if the cell value in 'ampicillin timing calculated' is negative, and return 1 to a new column if it is. 
     data = cutoff_number(data, 'ampicillin timing calculated', 'ampicillin_before_fever_yes_no', 0, above=0, below=1, empty_value=0)
     # Check if the cell value in 'ampicillin timing calculated', and return 1 to a new column if it is. 
-    data = cutoff_number(data, 'ampicillin timing calculated', 'ampicillin_after_fever_yes_no', 0, above=1, below=0, empty_value='')
+    data = cutoff_number(data, 'ampicillin timing calculated', 'ampicillin_after_fever_yes_no', 0, above=1, below=0, empty_value=0)
     
     # Flip the sign of numeric values in column 'ANA'
     #data = flip_sign(data, 'second stage length calculated')
@@ -1562,21 +1562,21 @@ def main():
     print(len(data)-len(filtered_labor_data), " rows without blood culture taken removed")
     data = filtered_labor_data
     
-    over_38_data = remove_rows_below_threshold(data, 'fever temperature numeric_max 37.5-43 before delivery-numeric result', 38)
+    over_38_data = remove_rows_below_threshold(data, 'fever temperature numeric_max 37.5-43 after delivery-numeric result', 38)
     print(len(data)-len(over_38_data), " rows below Temp 38 removed")
     data = over_38_data
     
     #data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
-    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=5 ,num_tuples=65, output_file="heatmap.csv")
+    generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=5 ,num_tuples=150, output_file="heatmap.csv")
     
     #filtered_newborn_data = filter_newborn_data_by_existing_patients("newborn_input.csv", data)
 
-    data = concat_values_across_batches(data, "antibiotics-medication_1", 3, 88, "concat_antibiotics_given" )  # antibiotics-medication_1 3 X 108
+    data = concat_values_across_batches(data, "antibiotics-medication_1", 3, 103, "concat_antibiotics_given" )  # antibiotics-medication_1 3 X 103
     result_df = generate_patient_specific_dataset(
         data=data,
         start_column="organisms susceptability-antibiotic_1",
         columns_per_set=5,
-        num_tuples=65,
+        num_tuples=150,
         patient_id_column="patient id",
         additional_fields=["concat_antibiotics_given", "birth-gestational age", "blood_culture_organisms", "blood_culture_organisms_category", "Blood_culture_Type_of_growth"],
         output_file="patient_specific_dataset.csv"
@@ -1657,17 +1657,17 @@ def main():
         'hospitalization delivery-hospital admission date',
         'hospitalization delivery-hospital discharge date',
         'newborn sheet-hospital admission date_1',
-        'newborn sheet-hospital admission date_2',
-        'newborn sheet-hospital admission date_3',
         'newborn sheet-hospital discharge date_1',
-        'newborn sheet-hospital discharge date_2',
-        'newborn sheet-hospital discharge date_3',
+        'newborn sheet-apgar 1_2~newborn sheet-child internal patient id_2',
+        'newborn sheet-apgar 1_3~newborn sheet-child internal patient id_3',
         'ph_arterial-numeric result_1~ph_arterial-lab test copy(1)_5',
         'bmi-date of measurement-days from reference',
         'second and third stage timeline-time of full dilation',
         'gbs status-gbs in urine',
         'gbs status-gbs vagina',
         'fever temperature numeric_max 37.5-43 before delivery-date of measurement',
+        'fever temperature numeric_max 37.5-43 after delivery-date of measurement',
+        'onset of fever 38 after delivery-date of measurement',
         'onset of fever 38 until delivery-date of measurement-hours from reference',
         'onset of fever 38 until delivery-date of measurement',
         'wbc max-collection date-hours from reference',
@@ -1678,13 +1678,13 @@ def main():
         'readmission-hospital admission date',
         'readmission-hospital discharge date-days from reference',
         'readmission-hospital discharge date',
-        'cultures-test type_1~cultures-stain_73',
-        'organisms susceptability-antibiotic_1~organisms susceptability-antibiotic panel_65',
-        'surgery before delivery-date of procedure-days from reference_1~surgery after delivery-department_4',
+        'cultures-test type_1~cultures-stain_104',
+        'organisms susceptability-antibiotic_1~organisms susceptability-antibiotic panel_150',
+        #'surgery before delivery-date of procedure-days from reference_1~surgery after delivery-department_10',
         'antibiotics_first-date administered-hours from reference~antibiotics_first-medication',
         'length of stay-room name~length of stay-room exit date',
         'imaging-exam performed (sps)_1~imaging-performed procedures_7',
-        'antibiotics-date administered-hours from reference_1~antibiotics-medication_88',
+        'antibiotics-date administered-hours from reference_1~antibiotics-medication_103',
         'surgery indication-type of surgery',
         'obstetric formula-number of abortions (ab)',
         'obstetric formula-number of births (p)',
@@ -1709,6 +1709,7 @@ def main():
         'blood_culture_taken',
         'birth-child internal patient id',
         'baby_1_date of birth',
+        'baby_1_date of death',
         'baby_1_reference occurrence number',
         'baby_1_cohort reference event-age_at_event',
         'baby_1_neonatal death -diagnosis~baby_1_death2-weight',
@@ -1718,41 +1719,18 @@ def main():
         'baby_1_apgar -documented birth time-days from reference~baby_1_apgar -patient id of newborn',
         'baby_1_sga-diagnosis~baby_1_mechanical ventilation-diagnosis',
         'baby_1_apgar -method of delivery',
+        'baby_1_transfer-department',
         'baby_1_apgar -birth rescue',
         'baby_1_apgar -birth experience',
         'baby_1_apgar -child number (in current delivery)',
         'baby_2_date of birth',
-        'baby_2_reference occurrence number',
-        'baby_2_cohort reference event-age_at_event',
-        'baby_2_neonatal death -diagnosis~baby_2_death2-weight',
-        'baby_2_apgar -apgar 1~baby_2_apgar -apgar 10',
-        'baby_2_apgar -weight~baby_2_apgar -pregnancy age',
-        'baby_2_apgar -department~baby_2_apgar -transferred to intensive care',
-        'baby_2_apgar -documented birth time-days from reference~baby_2_apgar -patient id of newborn',
-        'baby_2_sga-diagnosis~baby_2_mechanical ventilation-diagnosis',
-        'baby_2_apgar -method of delivery',
-        'baby_2_apgar -birth rescue',
-        'baby_2_apgar -birth experience',
-        'baby_2_apgar -child number (in current delivery)',
-        'baby_3_date of birth',
-        'baby_3_reference occurrence number',
-        'baby_3_cohort reference event-age_at_event',
-        'baby_3_neonatal death -diagnosis~baby_3_death2-weight',
-        'baby_3_apgar -apgar 1~baby_3_apgar -apgar 10',
-        'baby_3_apgar -weight~baby_3_apgar -pregnancy age',
-        'baby_3_apgar -department~baby_3_apgar -transferred to intensive care',
-        'baby_3_apgar -documented birth time-days from reference~baby_3_apgar -patient id of newborn',
-        'baby_3_sga-diagnosis~baby_3_mechanical ventilation-diagnosis'
-        'baby_3_apgar -method of delivery',
-        'baby_3_apgar -birth rescue',
-        'baby_3_apgar -birth experience',
-        'baby_3_apgar -child number (in current delivery)',
+        'baby_2_reference occurrence number~baby_3_apgar -patient id of newborn'
         #'baby_2_NICU_yes_or_no~baby_2_mechanical ventilation_yes_or_no',
         #'baby_3_NICU_yes_or_no~baby_3_mechanical ventilation_yes_or_no'
 
         ])
 
-
+    #data = add_row_index_column(data, col_name="Index")
     save_data(data, output_filepath)
     #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43 before delivery-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
 
