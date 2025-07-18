@@ -27,6 +27,11 @@ def column_name_to_index(data, column_name):
     else:
         raise KeyError(f"Column '{column_name}' not found in the DataFrame.")
 
+def _sanitize_antibiotic_name(name):
+    name = str(name).strip().upper()
+    match = re.match(r'^([A-Z]+(?: [A-Z]+)*)', name)
+    return match.group(1).strip() if match else ""
+
 def update_dataframe(originalData, col1, words1, logical_op, col2, words2, col3, step_size, num_steps, col3_empty, result_column_name, return_values=True, unique=False, dictionary=None, limitResults=None):    
     data = originalData.copy()
     # Prepare column indices
@@ -1003,6 +1008,63 @@ def add_days_between_flag(data, birth_col, death_col, result_col):
     data[result_col] = data.apply(check_days, axis=1)
     return data
 
+def flag_antibiotic_within_timeframe_idx(data, event_date_col, abx_med_col, abx_date_col, num_abx, step_size, timeframe, output_col, antibiotics_to_include=None):
+    abx_med_start = data.columns.get_loc(abx_med_col)
+    abx_date_start = data.columns.get_loc(abx_date_col)
+
+    if antibiotics_to_include:
+        abx_set = {_sanitize_antibiotic_name(abx) for abx in antibiotics_to_include}
+        def abx_match(name):
+            return _sanitize_antibiotic_name(name) in abx_set
+    else:
+        def abx_match(name):
+            return True
+
+    def check_time_in_window(row, event_time, ref_time):
+        for i in range(num_abx):
+            abx = row.iloc[abx_med_start + i * step_size]
+            abx_date = row.iloc[abx_date_start + i * step_size]
+            if pd.isna(abx) or str(abx).strip() == "" or not abx_match(abx):
+                continue
+            if pd.isna(abx_date) or str(abx_date).strip() == "":
+                continue
+            try:
+                abx_date_val = pd.to_datetime(abx_date)
+            except Exception:
+                continue
+            window_start = min(event_time, ref_time)
+            window_end = max(event_time, ref_time)
+            if window_start <= abx_date_val <= window_end:
+                return True
+        return False
+
+    if isinstance(timeframe, str):
+        def has_abx(row):
+            event_time = row.get(event_date_col, None)
+            ref_time = row.get(timeframe, None)
+            if pd.isna(event_time) or pd.isna(ref_time) or event_time == "" or ref_time == "":
+                return "no"
+            try:
+                event_time = pd.to_datetime(event_time)
+                ref_time = pd.to_datetime(ref_time)
+            except Exception:
+                return "no"
+            return "yes" if check_time_in_window(row, event_time, ref_time) else "no"
+    else:
+        def has_abx(row):
+            event_time = row.get(event_date_col, None)
+            if pd.isna(event_time) or event_time == "":
+                return "no"
+            try:
+                event_time = pd.to_datetime(event_time)
+            except Exception:
+                return "no"
+            # Add or subtract the hour offset using pd.Timedelta
+            ref_time = event_time + pd.Timedelta(hours=timeframe)
+            return "yes" if check_time_in_window(row, event_time, ref_time) else "no"
+
+    data[output_col] = data.apply(has_abx, axis=1)
+    return data
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -1648,6 +1710,21 @@ def main():
     #data = is_empty(data, 'baby_3_hypoxic ischemic encephalopathy -diagnosis', 'baby_3_HIE_yes_or_no', value_empty=0, value_not_empty=1)
     #data = is_empty(data, 'baby_3_sepsis-diagnosis', 'baby_3_sepsis_yes_or_no', value_empty=0, value_not_empty=1)
     #data = is_empty(data, 'baby_3_mechanical ventilation-diagnosis', 'baby_3_mechanical ventilation_yes_or_no', value_empty=0, value_not_empty=1)
+
+    # Example 1: Any abx within 48 hours *before* event
+    data = flag_antibiotic_within_timeframe_idx(
+        data, 'high fever-date', 'antibiotics-medication_1', 'antibiotics-date administered_1', 104, 3, -48, 'abx_in_48h_before'
+    )
+    data = flag_antibiotic_within_timeframe_idx(
+        data, 'high fever-date', 'antibiotics-medication_1', 'antibiotics-date administered_1', 104, 3, 48, 'abx_in_48h_after'
+    )
+
+    # Example #3: Only Ceftriaxone given between delivery and first fever
+    data = flag_antibiotic_within_timeframe_idx(
+        data, 'high fever-date', 'antibiotics-medication_1', 'antibiotics-date administered-days from reference_1',
+        104, 3, 'delivert-date', 'ceftriaxone_between_surgery_and_fever', antibiotics_to_include=['Ceftriaxone', 'sheker kolshehu']
+    )
+
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
