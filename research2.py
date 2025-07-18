@@ -1066,6 +1066,16 @@ def flag_antibiotic_within_timeframe_idx(data, event_date_col, abx_med_col, abx_
     data[output_col] = data.apply(has_abx, axis=1)
     return data
 
+
+def replace_column_spaces(data, replacement="_"):
+    """
+    Replace all spaces in DataFrame column names with the given replacement character/string.
+    Operates in-place and preserves column order.
+    """
+    data.columns = [col.replace(" ", replacement) for col in data.columns]
+    return data
+
+
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -1808,6 +1818,7 @@ def main():
         ])
 
     #data = add_row_index_column(data, col_name="Index")
+    data = replace_column_spaces(data)
     save_data(data, output_filepath)
     #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43 before delivery-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
 
