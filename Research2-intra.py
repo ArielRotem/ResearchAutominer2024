@@ -968,6 +968,13 @@ def add_baby_info_to_mothers(
     print(f"Matched {matched_babies} babies to {matched_mothers} mothers (patients).")
     return mothers_df
 
+def replace_column_spaces(data, replacement="_"):
+    """
+    Replace all spaces in DataFrame column names with the given replacement character/string.
+    Operates in-place and preserves column order.
+    """
+    data.columns = [col.replace(" ", replacement) for col in data.columns]
+    return data
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",

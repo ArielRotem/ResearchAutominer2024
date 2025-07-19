@@ -1009,7 +1009,7 @@ def add_days_between_flag(data, birth_col, death_col, result_col):
     data[result_col] = data.apply(check_days, axis=1)
     return data
 
-def flag_antibiotic_within_timeframe_idx(inputdata, event_date_col, abx_med_col, abx_date_col, num_abx, step_size, timeframe, output_col, antibiotics_to_include=None):
+def flag_antibiotic_within_timeframe_idx(inputdata, event_date_col, abx_med_col, abx_date_col, num_abx, step_size, timeframe, output_col, antibiotics_to_include=None, alternative_event_date_col=""):
     data = inputdata.copy()
     abx_med_start = data.columns.get_loc(abx_med_col)
     abx_date_start = data.columns.get_loc(abx_date_col)
@@ -1043,6 +1043,9 @@ def flag_antibiotic_within_timeframe_idx(inputdata, event_date_col, abx_med_col,
     if isinstance(timeframe, str):
         def has_abx(row):
             event_time = row.get(event_date_col, None)
+            if (pd.isna(event_time) or event_time == "") and alternative_event_date_col != "":
+                event_time = row.get(alternative_event_date_col, None)
+
             ref_time = row.get(timeframe, None)
             if pd.isna(event_time) or pd.isna(ref_time) or event_time == "" or ref_time == "":
                 return "0"
@@ -1077,6 +1080,63 @@ def replace_column_spaces(data, replacement="_"):
     data.columns = [col.replace(" ", replacement) for col in data.columns]
     return data
 
+def time_to_treatment_after_event(
+    inputdata,
+    event_date_col,
+    abx_med_col,
+    abx_date_col,
+    num_abx,
+    step_size,
+    result_col,
+    antibiotics_to_include=None
+):
+    """
+    For each row, finds the time in hours to the closest antibiotic (optionally filtered) given *after* the event date,
+    and records the normalized name of that antibiotic.
+    """
+    data = inputdata.copy()
+    abx_med_start = data.columns.get_loc(abx_med_col)
+    abx_date_start = data.columns.get_loc(abx_date_col)
+    event_col_idx = data.columns.get_loc(event_date_col)
+
+    if antibiotics_to_include:
+        abx_set = {_sanitize_antibiotic_name(a) for a in antibiotics_to_include}
+        def abx_match(name):
+            return _sanitize_antibiotic_name(name) in abx_set
+    else:
+        def abx_match(name):
+            return True
+
+    def find_time_and_abx(row):
+        try:
+            event_time = pd.to_datetime(row.iloc[event_col_idx])
+        except Exception:
+            return ("", "")
+        candidates = []
+        for i in range(num_abx):
+            abx = row.iloc[abx_med_start + i * step_size]
+            abx_time = row.iloc[abx_date_start + i * step_size]
+            if pd.isna(abx) or pd.isna(abx_time) or str(abx).strip() == "" or str(abx_time).strip() == "":
+                continue
+            if not abx_match(abx):
+                continue
+            try:
+                abx_time_val = pd.to_datetime(abx_time)
+            except Exception:
+                continue
+            delta_hours = (abx_time_val - event_time).total_seconds() / 3600
+            if delta_hours >= 0:
+                candidates.append((delta_hours, _sanitize_antibiotic_name(abx)))
+        if not candidates:
+            return ("", "")
+        best = sorted(candidates)[0]
+        return best  # (hours, abx name)
+
+    # Unpack tuple into two columns
+    data[[result_col, result_col + "_abx"]] = data.apply(
+        lambda row: pd.Series(find_time_and_abx(row)), axis=1
+    )
+    return data
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -1724,15 +1784,21 @@ def main():
     #data = is_empty(data, 'baby_3_mechanical ventilation-diagnosis', 'baby_3_mechanical ventilation_yes_or_no', value_empty=0, value_not_empty=1)
 
     
-    
+    # ABX from list given before "onset of fever 38 before delivery", or before delivery if there was no "onset of fever 38 before delivery" 
     data = flag_antibiotic_within_timeframe_idx(
-        data, 'onset of fever 38 after delivery-date of measurement', 'antibiotics-medication_1', 'antibiotics-date administered _1', 103, 3, -48, 'Penicillin/Clindamycin_given_in_48h_before_fever', antibiotics_to_include=['PENICILLIN G SODIUM', 'CLINDAMYCIN HCL', 'CLINDAMYCIN PHOSPHATE']
+        data, 'onset of fever 38 before delivery-date of measurement', 'antibiotics-medication_1', 'antibiotics-date administered _1', 103, 3, -96, 'Penicillin/Clindamycin_given_in_48h_before_fever', antibiotics_to_include=['PENICILLIN G SODIUM', 'CLINDAMYCIN HCL', 'CLINDAMYCIN PHOSPHATE', 'AMPICILLIN'], alternative_event_date_col="birth-date of first documentation - birth occurence"
     )
-    
-    
-    
-    
-    
+    data = time_to_treatment_after_event(
+        data,
+        event_date_col='onset of fever 38 after delivery-date of measurement',
+        abx_med_col='antibiotics-medication_1',
+        abx_date_col='antibiotics-date administered _1',
+        num_abx=103,
+        step_size=3,
+        result_col='time_to_ceftriaxone',
+        antibiotics_to_include=['Ceftriaxone']
+    )
+
     
     # Example 1: Any abx within 48 hours *before* event
     data = flag_antibiotic_within_timeframe_idx(
