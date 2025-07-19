@@ -965,7 +965,7 @@ def add_baby_info_to_mothers(
     mothers_df.update(baby_data)
     matched_mothers = sum(mother_matched_any)
 
-    print(f"Matched {matched_babies} babies to {matched_mothers} mothers (patients).")
+    print(f"Matched {matched_babies} babies to {matched_mothers} mothers (patients) out of {len(mothers_df)}.")
     return mothers_df
 
 def replace_column_spaces(data, replacement="_"):
