@@ -30,7 +30,7 @@ def column_name_to_index(data, column_name):
 
 def _sanitize_antibiotic_name(name):
     name = str(name).strip()
-    match = re.match(r'^([A-Z]+(?: [A-Z]+)*)', name)
+    match = re.match(r'^([A-Z+]+(?: [A-Z]+)*)', name)
     return match.group(1).strip() if match else ""
 
 def update_dataframe(originalData, col1, words1, logical_op, col2, words2, col3, step_size, num_steps, col3_empty, result_column_name, return_values=True, unique=False, dictionary=None, limitResults=None):    
@@ -1786,7 +1786,7 @@ def main():
     
     # ABX from list given before "onset of fever 38 before delivery", or before delivery if there was no "onset of fever 38 before delivery" 
     data = flag_antibiotic_within_timeframe_idx(
-        data, 'onset of fever 38 before delivery-date of measurement', 'antibiotics-medication_1', 'antibiotics-date administered _1', 103, 3, -96, 'Penicillin/Clindamycin_given_in_48h_before_fever', antibiotics_to_include=['PENICILLIN G SODIUM', 'CLINDAMYCIN HCL', 'CLINDAMYCIN PHOSPHATE', 'AMPICILLIN'], alternative_event_date_col="birth-date of first documentation - birth occurence"
+        data, 'onset of fever 38 before delivery-date of measurement', 'antibiotics-medication_1', 'antibiotics-date administered _1', 103, 3, -96, 'Penicillin/Clindamycin_given_in_48h_before_fever', antibiotics_to_include=['PENICILLIN G SODIUM', 'CLINDAMYCIN HCL', 'CLINDAMYCIN PHOSPHATE', 'AMPICILLIN', 'AMOXYCILLIN'], alternative_event_date_col="birth-date of first documentation - birth occurence"
     )
     data = time_to_treatment_after_event(
         data,
