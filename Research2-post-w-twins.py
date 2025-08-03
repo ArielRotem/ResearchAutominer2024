@@ -1263,6 +1263,9 @@ def split_twin_rows(data,
         for col_from, col_to in zip(cols, generic_cols):
             target_row[col_to] = row[col_from]
         target_row["twin_index"] = idx
+    
+    def is_nonempty(series):
+        return series.notnull() & (series.astype(str).str.strip() != "")
 
     df = data.copy()
     new_rows = []
@@ -1283,7 +1286,7 @@ def split_twin_rows(data,
         cols_b2b2 = df.columns[start_b2b2:start_b2b2 + b2b2_num_cols]
 
         # Add a new row if baby 2 exists
-        if original_row[cols_b2b1].notnull().any() or original_row[cols_b2b2].notnull().any():
+        if is_nonempty(original_row[cols_b2b1]).any() or is_nonempty(original_row[cols_b2b2]).any():
             row_baby2 = original_row.copy()
             copy_columns(original_row, b2b1_first_col, b2b1_num_cols, b2b1_rm_prefix, row_baby2, 2)
             copy_columns(original_row, b2b2_first_col, b2b2_num_cols, b2b2_rm_prefix, row_baby2, 2)
@@ -1299,7 +1302,7 @@ def split_twin_rows(data,
             start_b3b2 = df.columns.get_loc(b3b2_first_col)
             cols_b3b2 = df.columns[start_b3b2:start_b3b2 + b3b2_num_cols]
 
-            if original_row[cols_b3b1].notnull().any() or original_row[cols_b3b2].notnull().any():
+            if is_nonempty(original_row[cols_b3b1]).any() or is_nonempty(original_row[cols_b3b2]).any():
                 row_baby3 = original_row.copy()
                 copy_columns(original_row, b3b1_first_col, b3b1_num_cols, b3b1_rm_prefix, row_baby3, 3)
                 copy_columns(original_row, b3b2_first_col, b3b2_num_cols, b3b2_rm_prefix, row_baby3, 3)
