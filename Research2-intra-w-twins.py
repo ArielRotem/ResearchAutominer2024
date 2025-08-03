@@ -1245,7 +1245,7 @@ def calculate_exact_days_with_fallback(data, start_col, end_col, alternate_end_c
     return data
     
 
-def split_twin_rows(df,
+def split_twin_rows(data,
                     b1b1_first_col, b1b1_num_cols, b1b1_rm_prefix,
                     b1b2_first_col, b1b2_num_cols, b1b2_rm_prefix,
                     b2b1_first_col, b2b1_num_cols, b2b1_rm_prefix,
@@ -1258,30 +1258,49 @@ def split_twin_rows(df,
         generic_cols = [re.sub(f'^{re.escape(rm_prefix)}|{re.escape(rm_prefix)}$', '', col) for col in cols]
         for col_from, col_to in zip(cols, generic_cols):
             target_row[col_to] = row[col_from]
-            
+        target_row["twin_index"] = idx
+
+    df = data.copy()
     new_rows = []
     babies_split = 0
 
     for idx, row in df.iterrows():
-        row_baby1 = row
-        copy_columns(row, b1b1_first_col, b1b1_num_cols, b1b1_rm_prefix, row_baby1, 1)
-        copy_columns(row, b1b2_first_col, b1b2_num_cols, b1b2_rm_prefix, row_baby1, 1)
-        new_rows.append(row_baby1)
+        original_row = row.copy()
+        # Edit the original row in place for baby 1
+        copy_columns(row, b1b1_first_col, b1b1_num_cols, b1b1_rm_prefix, row, 1)
+        copy_columns(row, b1b2_first_col, b1b2_num_cols, b1b2_rm_prefix, row, 1)
+        row["has_twin"] = 0
+        new_rows.append(row)
 
-        if row[b2b1_first_col: b2b1_first_col + b2b1_num_cols].notnull().any() or \
-           row[b2b2_first_col: b2b2_first_col + b2b2_num_cols].notnull().any():
-            row_baby2 = row.copy()
-            copy_columns(row, b2b1_first_col, b2b1_num_cols, b2b1_rm_prefix, row_baby2, 2)
-            copy_columns(row, b2b2_first_col, b2b2_num_cols, b2b2_rm_prefix, row_baby2, 2)
+        # Prepare baby 2 column slices
+        start_b2b1 = df.columns.get_loc(b2b1_first_col)
+        cols_b2b1 = df.columns[start_b2b1:start_b2b1 + b2b1_num_cols]
+        start_b2b2 = df.columns.get_loc(b2b2_first_col)
+        cols_b2b2 = df.columns[start_b2b2:start_b2b2 + b2b2_num_cols]
+
+        # Add a new row if baby 2 exists
+        if original_row[cols_b2b1].notnull().any() or original_row[cols_b2b2].notnull().any():
+            row_baby2 = original_row.copy()
+            copy_columns(original_row, b2b1_first_col, b2b1_num_cols, b2b1_rm_prefix, row_baby2, 2)
+            copy_columns(original_row, b2b2_first_col, b2b2_num_cols, b2b2_rm_prefix, row_baby2, 2)
+            row["has_twin"] = 1
+            row_baby2["has_twin"] = 1
             new_rows.append(row_baby2)
             babies_split += 1
 
+        # Add a new row if baby 3 exists
         if b3b1_first_col and b3b2_first_col:
-            if row[b3b1_first_col: b3b1_first_col + b3b1_num_cols].notnull().any() or \
-               row[b3b2_first_col: b3b2_first_col + b3b2_num_cols].notnull().any():
-                row_baby3 = row.copy()
-                copy_columns(row, b3b1_first_col, b3b1_num_cols, b3b1_rm_prefix, row_baby3, 3)
-                copy_columns(row, b3b2_first_col, b3b2_num_cols, b3b2_rm_prefix, row_baby3, 3)
+            start_b3b1 = df.columns.get_loc(b3b1_first_col)
+            cols_b3b1 = df.columns[start_b3b1:start_b3b1 + b3b1_num_cols]
+            start_b3b2 = df.columns.get_loc(b3b2_first_col)
+            cols_b3b2 = df.columns[start_b3b2:start_b3b2 + b3b2_num_cols]
+
+            if original_row[cols_b3b1].notnull().any() or original_row[cols_b3b2].notnull().any():
+                row_baby3 = original_row.copy()
+                copy_columns(original_row, b3b1_first_col, b3b1_num_cols, b3b1_rm_prefix, row_baby3, 3)
+                copy_columns(original_row, b3b2_first_col, b3b2_num_cols, b3b2_rm_prefix, row_baby3, 3)
+                row["has_twin"] = 1
+                row_baby3["has_twin"] = 1
                 new_rows.append(row_baby3)
                 babies_split += 1
 
@@ -1290,6 +1309,7 @@ def split_twin_rows(df,
     print(f"{babies_split} babies split from their main row")
 
     return new_df
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
