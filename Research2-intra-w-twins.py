@@ -1256,9 +1256,9 @@ def split_twin_rows(df,
     def copy_columns(row, first_col, num_cols, rm_prefix, target_row, idx=0):
         cols = df.columns[df.columns.get_loc(first_col): df.columns.get_loc(first_col) + num_cols]
         generic_cols = [re.sub(f'^{re.escape(rm_prefix)}|{re.escape(rm_prefix)}$', '', col) for col in cols]
-        target_row[generic_cols] = row[cols].values
-        target_row["twin_index"]=idx
-
+        for col_from, col_to in zip(cols, generic_cols):
+            target_row[col_to] = row[col_from]
+            
     new_rows = []
     babies_split = 0
 
