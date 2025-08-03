@@ -1248,6 +1248,54 @@ def calculate_exact_days_with_fallback(data, start_col, end_col, alternate_end_c
     data[result_col] = final_delta
     return data    
 
+
+def split_twin_rows(df,
+                    b1b1_first_col, b1b1_num_cols, b1b1_rm_prefix,
+                    b1b2_first_col, b1b2_num_cols, b1b2_rm_prefix,
+                    b2b1_first_col, b2b1_num_cols, b2b1_rm_prefix,
+                    b2b2_first_col, b2b2_num_cols, b2b2_rm_prefix,
+                    b3b1_first_col=None, b3b1_num_cols=None, b3b1_rm_prefix=None,
+                    b3b2_first_col=None, b3b2_num_cols=None, b3b2_rm_prefix=None):
+
+    def copy_columns(row, first_col, num_cols, rm_prefix, target_row, idx=0):
+        cols = df.columns[df.columns.get_loc(first_col): df.columns.get_loc(first_col) + num_cols]
+        generic_cols = [col.replace(rm_prefix, '', 1) for col in cols]
+        target_row[generic_cols] = row[cols].values
+        target_row["twin_index"]=idx
+
+    new_rows = []
+    babies_split = 0
+
+    for idx, row in df.iterrows():
+        row_baby1 = row
+        copy_columns(row, b1b1_first_col, b1b1_num_cols, b1b1_rm_prefix, row_baby1, 1)
+        copy_columns(row, b1b2_first_col, b1b2_num_cols, b1b2_rm_prefix, row_baby1, 1)
+        new_rows.append(row_baby1)
+
+        if row[b2b1_first_col: b2b1_first_col + b2b1_num_cols].notnull().any() or \
+           row[b2b2_first_col: b2b2_first_col + b2b2_num_cols].notnull().any():
+            row_baby2 = row.copy()
+            copy_columns(row, b2b1_first_col, b2b1_num_cols, b2b1_rm_prefix, row_baby2, 2)
+            copy_columns(row, b2b2_first_col, b2b2_num_cols, b2b2_rm_prefix, row_baby2, 2)
+            new_rows.append(row_baby2)
+            babies_split += 1
+
+        if b3b1_first_col and b3b2_first_col:
+            if row[b3b1_first_col: b3b1_first_col + b3b1_num_cols].notnull().any() or \
+               row[b3b2_first_col: b3b2_first_col + b3b2_num_cols].notnull().any():
+                row_baby3 = row.copy()
+                copy_columns(row, b3b1_first_col, b3b1_num_cols, b3b1_rm_prefix, row_baby3, 3)
+                copy_columns(row, b3b2_first_col, b3b2_num_cols, b3b2_rm_prefix, row_baby3, 3)
+                new_rows.append(row_baby3)
+                babies_split += 1
+
+    new_df = pd.DataFrame(new_rows)
+
+    print(f"{babies_split} babies split from their main row")
+
+    return new_df
+
+
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -1390,9 +1438,9 @@ def load_data(filepath, delimiter=','):
     print("Failed to load data. Please check the file path and file format.")
     return None
 
-def save_data(data, filepath):
+def save_data(data, filepath='output.csv'):
     try:
-        data.to_csv('output.csv', encoding='utf-8', index=False)
+        data.to_csv(filepath, encoding='utf-8', index=False)
 
         print("Data saved successfully.")
     except Exception as e:
@@ -1997,8 +2045,18 @@ def main():
         #data, 'onset of fever 38 after delivery-date of measurement', 'antibiotics-medication_1', 'antibiotics-date administered _1', 103, 3, 96, 'Ampicillin_given_up_to_96h_after_fever', antibiotics_to_include=['AMPICILLIN']
     #)
 
+    data_split = split_twin_rows(
+        df=data,
+        b1b1_first_col='baby1_weight', b1b1_num_cols=18, b1b1_rm_prefix='baby1_',
+        b1b2_first_col='score1_apgar', b1b2_num_cols=8, b1b2_rm_prefix='score1_',
+        b2b1_first_col='baby2_weight', b2b1_num_cols=18, b2b1_rm_prefix='baby2_',
+        b2b2_first_col='score2_apgar', b2b2_num_cols=8, b2b2_rm_prefix='score2_',
+        b3b1_first_col=None, b3b1_num_cols=None, b3b1_rm_prefix=None,
+        b3b2_first_col=None, b3b2_num_cols=None, b3b2_rm_prefix=None
+    )
+
     # Remove specified columns, including single columns and ranges
-    data = remove_columns(data, [
+    columns_to_remove = [
         'reference occurrence number',
         'date of birth~date of death - days from delivery',
         'birth-date of first documentation - birth occurence',
@@ -2076,12 +2134,18 @@ def main():
         'baby_2_reference occurrence number~baby_3_apgar -patient id of newborn'
         'baby_2_NICU_yes_or_no~baby_2_mechanical ventilation_yes_or_no',
         'baby_3_NICU_yes_or_no~baby_3_mechanical ventilation_yes_or_no'
+    ]
+    data = remove_columns(data, columns_to_remove)
+    data_split = remove_columns(data_split, columns_to_remove)
 
-        ])
 
     #data = add_row_index_column(data, col_name="Index")
     data = replace_column_spaces(data)
-    save_data(data, output_filepath)
+    data_split = replace_column_spaces(data_split)
+
+    print(f' Data length: {len(data)}, Split twin data length: {len(data_split)}')
+    save_data(data, 'output.csv')
+    save_data(data_split, 'output_twins_split.csv')
     #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43 before delivery-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
 
 if __name__ == "__main__":
