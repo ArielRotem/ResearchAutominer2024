@@ -1181,8 +1181,8 @@ def count_unique_growths_by_dfr(
     prefix_for_columns=None     # e.g., "growth_"
 ):
     """
-    For each row: scan batched (DaysFromReference, growth), map growth via organism_dict,
-    dedupe by (DaysFromReference, mapped_growth), count per mapped_growth.
+    For each row: scan batched (DaysFromReference, growth), split growth on ';',
+    map each token via organism_dict, dedupe by (DaysFromReference, mapped_growth), count per mapped_growth.
     Optionally adds a compact map column and/or wide per-growth _count columns.
     """
     import re
@@ -1193,10 +1193,8 @@ def count_unique_growths_by_dfr(
     days_base_index = column_name_to_index(out, dfr_first_col)
     growth_base_index = column_name_to_index(out, growth_first_col)
 
-    def _norm_org_key(x):
-        s = "" if pd.isna(x) else str(x).strip().upper()
-        s = re.sub(r"[,\s\-]+", " ", s)
-        return s
+    def _safe_col(s):
+        return re.sub(r"[^0-9A-Za-z]+", "_", s).strip("_")
 
     all_growth_labels = set()
     per_row_counts = []
@@ -1212,58 +1210,65 @@ def count_unique_growths_by_dfr(
             if days_index >= len(row) or growth_index >= len(row):
                 continue
 
-            raw_growth = row.iloc[growth_index]
-            org_key = _norm_org_key(raw_growth)
-            if not org_key:
-                continue
-
-            mapped_growth = organism_dict.get(org_key)
-            if not mapped_growth:
-                print(f"Error finding organizm category for {org_key}")
-
+            # days-from-reference (float)
             raw_days = row.iloc[days_index]
             days_value = pd.to_numeric(raw_days, errors="coerce")
 
-            if pd.isna(days_value):
-                print(f"[growth-count] row={row_index}: growth '{mapped_growth}' has no valid DaysFromReference at batch {step}")
+            raw_growth_cell = row.iloc[growth_index]
+            if pd.isna(raw_growth_cell):
                 continue
 
-            pair_key = (float(days_value), mapped_growth)
-            if pair_key in seen_pairs:
-                continue
-            seen_pairs.add(pair_key)
-            counts[mapped_growth] += 1
+            # split multi-organism cell on ';'
+            for token in str(raw_growth_cell).split(';'):
+                token = token.strip()
+                if not token:
+                    continue
+
+                mapped_growth = organism_dict.get(token)
+                if not mapped_growth:  # skip unknowns; change to get(token, token) to include them
+                    print(f"Error finding organizm category for {token}")
+                    mapped_growth = organism_dict.get(token, token)
+
+                if pd.isna(days_value):
+                    print(f"[growth-count] row={row_index}: growth '{mapped_growth}' has no valid DaysFromReference at batch {step}")
+                    continue
+
+                pair_key = (float(days_value), mapped_growth)
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+                counts[mapped_growth] += 1
 
         per_row_counts.append(dict(counts))
         if prefix_for_columns:
-            all_growth_labels.update(counts.keys())
+            # only keep valid string labels to avoid sort issues
+            all_growth_labels.update([g for g in counts.keys() if isinstance(g, str) and g])
 
     # wide columns (one per growth)
     if prefix_for_columns:
-        def _safe(s):
-            return re.sub(r"[^0-9A-Za-z]+", "_", s).strip("_")
-
         ordered_growths = sorted(all_growth_labels, key=custom_sort)
         for g in ordered_growths:
-            out[f"{prefix_for_columns}{_safe(g)}_count"] = 0
+            out[f"{prefix_for_columns}{_safe_col(g)}_count"] = 0
 
         for i, counts in enumerate(per_row_counts):
             ridx = out.index[i]
             for g, c in counts.items():
-                out.at[ridx, f"{prefix_for_columns}{_safe(g)}_count"] = c
+                out.at[ridx, f"{prefix_for_columns}{_safe_col(g)}_count"] = c
 
-    # compact map column like "E_COLI:2; STAPH_AUREUS:1"
+    # compact map column like "E. coli:2; Staph aureus:1"
     if map_column_name:
         maps = []
         for counts in per_row_counts:
             if counts:
-                parts = [f"{g}:{counts[g]}" for g in sorted(counts.keys(), key=custom_sort)]
+                keys = [g for g in counts.keys() if isinstance(g, str) and g]
+                parts = [f"{g}:{counts[g]}" for g in sorted(keys, key=custom_sort)]
                 maps.append("; ".join(parts))
             else:
                 maps.append("")
         out[map_column_name] = maps
 
     return out
+
 
 
 organism_dict = {
