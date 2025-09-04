@@ -1978,7 +1978,7 @@ def main():
 
     data = count_unique_growths_by_dfr(
         data=data,
-        date_first_col="blood cultures-date collected_1",
+        dfr_first_col="blood cultures-date collected_1",
         growth_first_col="blood cultures-organism detected_1",
         num_steps=61,
         step_size=8,
