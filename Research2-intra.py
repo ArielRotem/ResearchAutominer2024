@@ -1170,19 +1170,19 @@ def add_row_index_column(data, col_name="Index", first_position=True):
     return indexed
 
 
-def count_unique_growths_by_date(
+def count_unique_growths_by_dfr(
     data,
-    date_first_col,
-    growth_first_col,
+    dfr_first_col,              # e.g., "blood cultures-date collected-days from reference_1"
+    growth_first_col,           # e.g., "blood cultures-organism detected_1"
     num_steps,
     step_size,
     organism_dict,
-    map_column_name=None,       # e.g. "growth_counts_map"
-    prefix_for_columns=None     # e.g. "growth_"
+    map_column_name=None,       # e.g., "growth_counts_map"
+    prefix_for_columns=None     # e.g., "growth_"
 ):
     """
-    For each row: scan batched (date, growth), map growth via organism_dict,
-    dedupe by (date, mapped_growth), count per mapped_growth.
+    For each row: scan batched (DaysFromReference, growth), map growth via organism_dict,
+    dedupe by (DaysFromReference, mapped_growth), count per mapped_growth.
     Optionally adds a compact map column and/or wide per-growth _count columns.
     """
     import re
@@ -1190,7 +1190,7 @@ def count_unique_growths_by_date(
 
     out = data.copy()
 
-    date_base_index = column_name_to_index(out, date_first_col)
+    days_base_index = column_name_to_index(out, dfr_first_col)
     growth_base_index = column_name_to_index(out, growth_first_col)
 
     def _norm_org_key(x):
@@ -1207,9 +1207,9 @@ def count_unique_growths_by_date(
 
         for step in range(num_steps):
             offset = step * step_size
-            date_index = date_base_index + offset
+            days_index = days_base_index + offset
             growth_index = growth_base_index + offset
-            if date_index >= len(row) or growth_index >= len(row):
+            if days_index >= len(row) or growth_index >= len(row):
                 continue
 
             raw_growth = row.iloc[growth_index]
@@ -1221,17 +1221,14 @@ def count_unique_growths_by_date(
             if not mapped_growth:
                 print(f"Error finding organizm category for {org_key}")
 
-            raw_date = row.iloc[date_index]
-            try:
-                parsed_dt = pd.to_datetime(raw_date, errors="coerce", dayfirst=DAYFIRST)
-            except NameError:
-                parsed_dt = pd.to_datetime(raw_date, errors="coerce")
+            raw_days = row.iloc[days_index]
+            days_value = pd.to_numeric(raw_days, errors="coerce")
 
-            if pd.isna(parsed_dt):
-                print(f"[growth-count] row={row_index}: growth '{mapped_growth}' has no valid date at batch {step}")
+            if pd.isna(days_value):
+                print(f"[growth-count] row={row_index}: growth '{mapped_growth}' has no valid DaysFromReference at batch {step}")
                 continue
 
-            pair_key = (parsed_dt, mapped_growth)
+            pair_key = (float(days_value), mapped_growth)
             if pair_key in seen_pairs:
                 continue
             seen_pairs.add(pair_key)
@@ -1241,6 +1238,7 @@ def count_unique_growths_by_date(
         if prefix_for_columns:
             all_growth_labels.update(counts.keys())
 
+    # wide columns (one per growth)
     if prefix_for_columns:
         def _safe(s):
             return re.sub(r"[^0-9A-Za-z]+", "_", s).strip("_")
@@ -1254,6 +1252,7 @@ def count_unique_growths_by_date(
             for g, c in counts.items():
                 out.at[ridx, f"{prefix_for_columns}{_safe(g)}_count"] = c
 
+    # compact map column like "E_COLI:2; STAPH_AUREUS:1"
     if map_column_name:
         maps = []
         for counts in per_row_counts:
@@ -1972,7 +1971,7 @@ def main():
     #)
 
 
-    data = count_unique_growths_by_date(
+    data = count_unique_growths_by_dfr(
         data=data,
         date_first_col="blood cultures-date collected_1",
         growth_first_col="blood cultures-organism detected_1",
