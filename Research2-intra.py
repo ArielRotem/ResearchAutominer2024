@@ -1169,7 +1169,104 @@ def add_row_index_column(data, col_name="Index", first_position=True):
     
     return indexed
 
-    
+
+def count_unique_growths_by_date(
+    data,
+    date_first_col,
+    growth_first_col,
+    num_steps,
+    step_size,
+    organism_dict,
+    map_column_name=None,       # e.g. "growth_counts_map"
+    prefix_for_columns=None     # e.g. "growth_"
+):
+    """
+    For each row: scan batched (date, growth), map growth via organism_dict,
+    dedupe by (date, mapped_growth), count per mapped_growth.
+    Optionally adds a compact map column and/or wide per-growth _count columns.
+    """
+    import re
+    from collections import defaultdict
+
+    out = data.copy()
+
+    date_base_index = column_name_to_index(out, date_first_col)
+    growth_base_index = column_name_to_index(out, growth_first_col)
+
+    def _norm_org_key(x):
+        s = "" if pd.isna(x) else str(x).strip().upper()
+        s = re.sub(r"[,\s\-]+", " ", s)
+        return s
+
+    all_growth_labels = set()
+    per_row_counts = []
+
+    for row_index, row in out.iterrows():
+        seen_pairs = set()
+        counts = defaultdict(int)
+
+        for step in range(num_steps):
+            offset = step * step_size
+            date_index = date_base_index + offset
+            growth_index = growth_base_index + offset
+            if date_index >= len(row) or growth_index >= len(row):
+                continue
+
+            raw_growth = row.iloc[growth_index]
+            org_key = _norm_org_key(raw_growth)
+            if not org_key:
+                continue
+
+            mapped_growth = organism_dict.get(org_key)
+            if not mapped_growth:
+                print(f"Error finding organizm category for {org_key}")
+
+            raw_date = row.iloc[date_index]
+            try:
+                parsed_dt = pd.to_datetime(raw_date, errors="coerce", dayfirst=DAYFIRST)
+            except NameError:
+                parsed_dt = pd.to_datetime(raw_date, errors="coerce")
+
+            if pd.isna(parsed_dt):
+                print(f"[growth-count] row={row_index}: growth '{mapped_growth}' has no valid date at batch {step}")
+                continue
+
+            pair_key = (parsed_dt, mapped_growth)
+            if pair_key in seen_pairs:
+                continue
+            seen_pairs.add(pair_key)
+            counts[mapped_growth] += 1
+
+        per_row_counts.append(dict(counts))
+        if prefix_for_columns:
+            all_growth_labels.update(counts.keys())
+
+    if prefix_for_columns:
+        def _safe(s):
+            return re.sub(r"[^0-9A-Za-z]+", "_", s).strip("_")
+
+        ordered_growths = sorted(all_growth_labels, key=custom_sort)
+        for g in ordered_growths:
+            out[f"{prefix_for_columns}{_safe(g)}_count"] = 0
+
+        for i, counts in enumerate(per_row_counts):
+            ridx = out.index[i]
+            for g, c in counts.items():
+                out.at[ridx, f"{prefix_for_columns}{_safe(g)}_count"] = c
+
+    if map_column_name:
+        maps = []
+        for counts in per_row_counts:
+            if counts:
+                parts = [f"{g}:{counts[g]}" for g in sorted(counts.keys(), key=custom_sort)]
+                maps.append("; ".join(parts))
+            else:
+                maps.append("")
+        out[map_column_name] = maps
+
+    return out
+
+
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -1874,6 +1971,17 @@ def main():
         #data, 'onset of fever 38 after delivery-date of measurement', 'antibiotics-medication_1', 'antibiotics-date administered _1', 103, 3, 96, 'Ampicillin_given_up_to_96h_after_fever', antibiotics_to_include=['AMPICILLIN']
     #)
 
+
+    data = count_unique_growths_by_date(
+        data=data,
+        date_first_col="blood cultures-date collected_1",
+        growth_first_col="blood cultures-organism detected_1",
+        num_steps=61,
+        step_size=8,
+        organism_dict=organism_dict,
+        map_column_name="organism_counts_map",
+        prefix_for_columns="count_unique_"
+    )
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
