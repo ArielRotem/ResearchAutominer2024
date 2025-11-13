@@ -145,7 +145,11 @@ def update_column_with_values(data, column_name, words_dict, default_value="0", 
         return ""
 
     data.iloc[:, column_index] = data.iloc[:, column_index].astype(str).apply(replace_value)
-
+def update_column_with_values_batch(inputdata, column_name, words_dict, default_value="0", empty_value=None, batch=1):
+    data = inputdata.copy()
+    for i in range(1, batch + 1):
+        update_column_with_values(data, f"{column_name}_{i}", words_dict, default_value, empty_value)
+    return data                                                                                                                    
 def clear_negative_values(data, column_name):
     col_index = column_name_to_index(data, column_name)
     # Convert column values to numbers in a temporary series, treating errors and empty strings
@@ -441,19 +445,48 @@ def cutoff_number(data, column_name, new_column_name, cutoff, above=1, below=0, 
     data[new_column_name] = data.iloc[:, column_index].apply(check_cutoff)
     return data
 
+def cutoff_range_numeric(data, column_name, new_column_name, lower_bound, upper_bound, in_range=1, out_of_range=0, empty_value=None):
+    """
+    Creates a new column indicating whether values fall within a numeric range.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to modify.
+    column_name (str): Column name to check.
+    new_column_name (str): Name of the new column to create.
+    lower_bound (float): Lower bound of the acceptable range (inclusive).
+    upper_bound (float): Upper bound of the acceptable range (inclusive).
+    in_range (int): Value to assign if the cell value is within the range.
+    out_of_range (int): Value to assign if the cell value is outside the range.
+    empty_value (any): Value to assign if the original cell is empty or non-numeric.
+
+    Returns:
+    pd.DataFrame: The DataFrame with the new column added.
+    """
+    column_index = column_name_to_index(data, column_name)
+
+    def check_range(x):
+        try:
+            x = float(x)
+            return in_range if lower_bound <= x <= upper_bound else out_of_range
+        except ValueError:
+            return empty_value
+
+    data[new_column_name] = data.iloc[:, column_index].apply(check_range)
+    return data
 def compare_values(data, column_name, new_column_name, target_value, match_return, no_match_return):
     """
     Creates a new column in a DataFrame to indicate whether cell values in a specified column 
     match a given value, considering type coercion to handle both numeric and string comparisons.
     Returns 'match_return' if they match, 'no_match_return' otherwise.
+    Leaves empty cells as empty in the new column.
 
     Args:
     data (pd.DataFrame): The DataFrame to modify.
-    column_letter (str): Excel-style column letter of the column to check.
+    column_name (str): Name of the column to check.
     new_column_name (str): Name of the new column to create.
-    target_value (any): Value to compare against the cell values. If it's a string that can be a number, comparisons will consider numeric equivalence.
-    match_return (any): Value to return in the new column if the cell matches the target_value.
-    no_match_return (any): Value to return in the new column if the cell does not match the target_value.
+    target_value (any): Value to compare against the cell values.
+    match_return (any): Value to return if the cell matches target_value.
+    no_match_return (any): Value to return if the cell does not match target_value.    
 
     Returns:
     pd.DataFrame: The DataFrame with the new column added.
@@ -461,6 +494,8 @@ def compare_values(data, column_name, new_column_name, target_value, match_retur
     column_index = column_name_to_index(data, column_name)
     
     def check_match(x):
+        if pd.isna(x) or str(x).strip() == "":
+            return x  # Leave empty cells unchanged                                     
         try:
             # Attempt to convert both x and target_value to floats for comparison
             if float(x) == float(target_value):
@@ -1137,6 +1172,7 @@ def time_to_treatment_after_event(
         lambda row: pd.Series(find_time_and_abx(row)), axis=1
     )
     return data
+
     
 def reorder_columns(data, ordered_cols):
     """
@@ -1269,8 +1305,6 @@ def count_unique_growths_by_dfr(
 
     return out
 
-
-
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -1281,6 +1315,7 @@ organism_dict = {
     "ALLOSCARDOVIA OMNICOLENS": "Anaerobes",
     "ANAEROBIC GRAM NEGATIVE ROD": "Anaerobes",
     "ANAEROBIC GRAM POSITIVE COCCUS": "Anaerobes",
+    "ANAEROBIC GRAM POSITIVE ROD": "Anaerobes",
     "ANAEROBIC GRAM VARIABLE ROD": "Anaerobes",
     "ASPERGILLUS FUMIGATUS": "Fungi",
     "ASPERGILLUS VERSICOLOR": "Fungi",
@@ -1371,7 +1406,10 @@ organism_dict = {
     "STREPTOCOCCUS PYOGENES": "Haemolytic streptococci other than GBS",
     "STREPTOCOCCUS SALIVARIUS GROUP": "Non-hemolitic Strep (viridans + enterococci)",
     "VIRIDANS STREPTOCOCCI": "Non-hemolitic Strep (viridans + enterococci)",
-    "VEILLONELLA SPECIES" : "Vaginal Flora" 
+    "VEILLONELLA SPECIES": "Vaginal Flora",
+    "DIALISTER MICRAEROPHILUS": "Anaerobes",
+    "ROSEMONAS MUCOSA": "Other Gram Negatives",
+    "BACILLUS SIMPLEX": "Contaminants (CONS etc.)"    
     # Anything else is set to "Other".
 }
 
@@ -1510,15 +1548,21 @@ def main():
     de_dupe_data = remove_duplicates(all_data, ['patient id', 'birth-birth number', 'birth-pregnancy number', 'obstetric formula-number of births (p)', 'obstetric formula-number of pregnancies (g)'])
     print(len(all_data)-len(de_dupe_data), " rows removed in de-dupe")
 
-    over_threshold_data = remove_rows_below_threshold(de_dupe_data, 'birth-gestational age', 24.0)
-    print(len(de_dupe_data)-len(over_threshold_data), " rows below gestational age 24 removed")
+    over_38_data = remove_rows_below_threshold(de_dupe_data, 'fever temperature numeric_max 37.5-43-numeric result', 38)
+    print(len(de_dupe_data)-len(over_38_data), " rows below Temp 38 removed")
+    
+    unique_patients = remove_duplicates(over_38_data, ['patient id'])
+    
+    print(f"Study starting with {len(over_38_data)} deliveries with postpartum fever - {len(unique_patients)} patients")
+    
+    over_threshold_data = remove_rows_below_threshold(over_38_data, 'birth-gestational age', 24.0)
+    print(len(over_38_data)-len(over_threshold_data), " rows below gestational age 24 removed")
 
-    data = remove_rows_if_contains(over_threshold_data, 'birth-type of labor onset', ['misoprostol', 'termination of pregnancy','IUFD'])
-    print(len(over_threshold_data)-len(data), " rows with misoprostol/termination removed")
+    no_termination_data = remove_rows_if_contains(over_threshold_data, 'birth-type of labor onset', ['misoprostol', 'termination of pregnancy','IUFD'])
+    print(len(over_threshold_data)-len(no_termination_data), " rows with misoprostol/termination removed")
 
-    data = remove_rows_above_threshold(data, 'birth-fetus count', 1)
-    print(len(over_threshold_data)-len(data), " rows with fetus count above 1 removed")
-
+    data = remove_rows_above_threshold(no_termination_data, 'birth-fetus count', 1)
+    print(len(no_termination_data)-len(data), " rows with fetus count above 1 removed")                                                                               
 
     ## Cultures taken yes/no Follow by Positive yes/no
     data = containswords_andor_containswords_result_exists(data, 'cultures-test type_1', ['דם'], 'OR','cultures-specimen material_1', ['דם'], 8, 61, 'blood_culture_taken')
@@ -1698,8 +1742,8 @@ def main():
         "2": ["Non Reassuring Fetal Monitor"],
         "3": ["Arrest of dilatation","Dysfunctional Labour","Failed Induction","Failure of descent", "No progress", "Susp. CPD","Failed Vacuum Extraction","Failed Forceps extraction"],
         "4": ["MATERNAL REQUEST","Maternal Exhaustion"],
-        "5": ["Prev. C.S. - Patient`s Request","Previous Uterine Scar"],
-        "6": ["Macrosomia", "S/P Myomectomy"],
+        "5": ["Prev. C.S. - Patient`s Request","Previous Uterine Scar", "S/P Myomectomy"],
+        "6": ["Macrosomia"],
         "7": ["Fetal Thrombocytopenia","Marginal placenta","Multiple Pregnancy", "Other Indication", "Past Shoulder Dystocia", "Placenta Accreta", "Placenta previa", "Prolapse of Cord", "S/P Tear III/IV degree","Susp. Uterine Rupture", "Suspected Placental Abruption", "Suspected Vasa Previa", "TWINS PREGNANCY", "Tumor Previa", "Elderly Primipara", "Genital Herpes"]
         
     }
@@ -1709,7 +1753,26 @@ def main():
     ## Hysterectomy yes/no
     data = containswords_result_exists(data, 'surgery before delivery-procedure_1', ['HYSTERECTOMY'], 4, 4, 'Hysterectomy_done_yes_or_no')
     
+    #עמודה בשם cs info-type of surgery
+    words_dict_12 = {
+        "1": ["אלקטיבי","סמי-אלקטיבי", "ניתוח קיסרי ידידותי"],
+        #"2": ["סמי-אלקטיבי"],
+        "3": ["דחוף", "בהול"],
+        #"4": ["בהול"]
+        
+    }
+    update_column_with_values(data, 'surgery indication-type of surgery', words_dict_12, default_value="Other", empty_value="")
     
+    #create yes/no column
+    data = compare_values(data, column_name='surgery indication-type of surgery', new_column_name='Elective_CS_yes/no',
+                               target_value=1,
+                               match_return=1,
+                               no_match_return=0)
+                               
+    data = compare_values(data, column_name='surgery indication-type of surgery', new_column_name='Urgent_CS_yes/no',
+                               target_value=3,
+                               match_return=1,
+                               no_match_return=0)                                         
      #*עמודות YN,YR,YV,YZ - בשם Procedure
      #0-No or Hysterectomy, 1-Laparotomy, 2-Laparoscoy, 3-Other
     words_dict_13 = {
@@ -1719,12 +1782,12 @@ def main():
         "3": ["WIDE","DEBRIDEMENT", "DEBRIDMENT ", "INCISION AND DRAINAGE", "BREAST","HEMATOMA","OTHER", "EMBOLIZATION OF UTERINE ARTERY", "APPENDECTOMY", "colostomy", "ILEOSTOMY", "hemicolectomy"]
       
     }
-    update_column_with_values(data, 'surgery before delivery-procedure_1', words_dict_13, default_value="Other", empty_value="0")
-    update_column_with_values(data, 'surgery before delivery-procedure_2', words_dict_13, default_value="Other", empty_value="0")
-    update_column_with_values(data, 'surgery after delivery-procedure_1', words_dict_13, default_value="Other", empty_value="0")
-    update_column_with_values(data, 'surgery after delivery-procedure_2', words_dict_13, default_value="Other", empty_value="0")
-    update_column_with_values(data, 'surgery after delivery-procedure_3', words_dict_13, default_value="Other", empty_value="0")
-    update_column_with_values(data, 'surgery after delivery-procedure_4', words_dict_13, default_value="Other", empty_value="0")
+    data = update_column_with_values_batch(data, 'surgery before delivery-procedure', words_dict_13, default_value="Other", empty_value="0", batch=2)
+    #update_column_with_values(data, 'surgery before delivery-procedure_2', words_dict_13, default_value="Other", empty_value="")
+                                                                                                                                
+    data = update_column_with_values_batch(data, 'surgery after delivery-procedure', words_dict_13, default_value="Other", empty_value="0", batch=4)
+                                                                                                                                
+    #update_column_with_values(data, 'surgery after delivery-procedure_2', words_dict_13, default_value="Other", empty_value="")
 
     
     
@@ -1750,13 +1813,22 @@ def main():
     data = filter_numbers(data, 'birth-pregnancy number', lowerThan=0, higherThan=20)
     
     
+    #Hospital_length_of_stay_above_3d                                                         
     data = cutoff_number(data, 'hospitalization delivery-hospital length of stay', 'Hospital_length_of_stay_above_3d', 3, above=1, below=0, empty_value='')
     
     # Filter numbers in column 'AS', removing values below 15 and/or above 55
     data = filter_numbers(data, 'bmi-numeric result', lowerThan=15, higherThan=55)
     # BMI higher then 30
     data = cutoff_number(data, 'bmi-numeric result', 'BMI_above_30', 30, above=1, below=0, empty_value='')
+    #premature labor categories - Check if numeric values in column 'gestational age' is in-range or out-of-range for prematurity categories, and add results in a new column '___'
+    data = cutoff_range_numeric(data, 'birth-gestational age', 'Late_premature_labor_(34≤GA<37)', 34, 36.6, in_range=1, out_of_range=0, empty_value=None)
+    data = cutoff_range_numeric(data, 'birth-gestational age', 'Moderate_early_premature_labor_(32≤GA<34)', 32, 33.6, in_range=1, out_of_range=0, empty_value=None)
+    data = cutoff_range_numeric(data, 'birth-gestational age', 'Very_early_premature_labor_(28≤GA<32)', 28, 31.6, in_range=1, out_of_range=0, empty_value=None)
+    data = cutoff_range_numeric(data, 'birth-gestational age', 'Extremely_early_premature_labor_(GA<28)', 24, 27.6, in_range=1, out_of_range=0, empty_value=None)
     
+    
+    #fever before delivery (above 38) - yes/no
+    data = cutoff_number(data, 'fever temperature numeric_max 37.5-43-numeric result', 'fever_before_delivery', 38, above=1, below=0, empty_value='')                                                                                                                                     
     #Apgar below 7
     data = cutoff_number(data, 'newborn sheet-apgar 1_1', 'Apgar_1m_below_7', 7, above=0, below=1, empty_value='')
     data = cutoff_number(data, 'newborn sheet-apgar 5_1', 'Apgar_5m_below_7', 7, above=0, below=1, empty_value='')
@@ -1798,7 +1870,7 @@ def main():
     data = multiply_by_number(data, 'length of stay delivery room calculated', multiplier=24)
     data = filter_numbers(data, 'length of stay delivery room calculated', higherThan=100)
     
-    # Check if the cell value in maternal diagnosis column is empty or not, and returns 1 if its not, 0 if it is.
+   # Check if the cell value in maternal diagnosis column is empty or not, and returns 1 if its not, 0 if it is.
     data = is_empty(data, 'maternal pregestaional diabetes-diagnosis', 'maternal_pregestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal gestational diabetes-diagnosis', 'maternal_gestational_diabetes_yes_or_no', value_empty=0, value_not_empty=1)
     data = is_empty(data, 'maternal pregestational hypertension-diagnosis', 'maternal_pregestational_hypertension_yes_or_no', value_empty=0, value_not_empty=1)
@@ -1815,7 +1887,7 @@ def main():
     data = flip_sign(data, 'fever temperature numeric_max 37.5-43-date of measurement-hours from reference')
 
     data = combine_columns(data, ['surgery before delivery-procedure_1', 'surgery before delivery-procedure_2'], 'Surgery_before_delivery', delimiter=', ')
-    data = combine_columns(data, ['surgery after delivery-procedure_1', 'surgery after delivery-procedure_2'], 'Surgery_after_delivery', delimiter=', ')
+    data = combine_columns(data, ['surgery after delivery-procedure_1', 'surgery after delivery-procedure_2', 'surgery after delivery-procedure_3', 'surgery after delivery-procedure_4'], 'Surgery_after_delivery', delimiter=', ')
 
     ## CT done yes/no
     data = containswords_result_exists(data, 'imaging-exam performed (sps)_1', ['CT'], 5, 7, 'ct_done_yes_or_no')
@@ -1840,12 +1912,7 @@ def main():
      # Remove specified rows, where cultures not taken
     filtered_labor_data = remove_rows_if_contains(data, 'blood_culture_taken', ['0'])
     print(len(data)-len(filtered_labor_data), " rows without blood culture taken removed")
-    data = filtered_labor_data
-    
-    over_38_data = remove_rows_below_threshold(data, 'fever temperature numeric_max 37.5-43-numeric result', 38)
-    print(len(data)-len(over_38_data), " rows below Temp 38 removed")
-    data = over_38_data
-    
+    data = filtered_labor_data                                                   
     #data = process_column_tuples(data, start_column="organisms susceptability-antibiotic_1", columns=5 ,num_tuples=65, transformations={"S": 1, "I": 2, "R": 3}, default_value=None)
     generate_heatmap_with_counts(data, start_column="organisms susceptability-antibiotic_1", columns_per_set=5 ,num_tuples=65, output_file="heatmap.csv")
     
@@ -1978,13 +2045,13 @@ def main():
 
     data = count_unique_growths_by_dfr(
         data=data,
-        dfr_first_col="blood cultures-date collected_1",
-        growth_first_col="blood cultures-organism detected_1",
+        dfr_first_col="cultures-collection date-days from reference_1",
+        growth_first_col="cultures-organism detected_1",
         num_steps=61,
         step_size=8,
         organism_dict=organism_dict,
         map_column_name="organism_counts_map",
-        prefix_for_columns="count_unique_"
+        prefix_for_columns="unique_"
     )
 
     # Remove specified columns, including single columns and ranges
@@ -2062,6 +2129,7 @@ def main():
         'baby_1_apgar -child number (in current delivery)',
         'baby_2_date of birth',
         'baby_2_reference occurrence number~baby_3_apgar -patient id of newborn',
+        "birth-fetus count",
         #'baby_2_NICU_yes_or_no~baby_2_mechanical ventilation_yes_or_no',
         #'baby_3_NICU_yes_or_no~baby_3_mechanical ventilation_yes_or_no'
 
@@ -2069,7 +2137,8 @@ def main():
 
     data = add_row_index_column(data, col_name="Index")
     data = replace_column_spaces(data)
-    data = reorder_columns(data, ["Index",  "patient_id",   "birth-age_when_documented",    "maternal_age_above_35",    "birth-birth_number",   "nulliparous_yesno",    "birth-pregnancy_number",   "birth-type_of_labor_onset",    "birth-gestational_age",    "birth-birth_site", "hospitalization_delivery-hospital_length_of_stay", "Hospital_length_of_stay_above_3d", "obstetric_formula-number_of_cesarean_sections_(cs)",   "obstetric_formula-number_of_vaginal_births_after_cesarean_sections_(vbac)",    "Previous_CS_yes_no",   "Previous_VBAC_yes_no","pregnancy_conceive-pregnancy_type", "newborn_sheet-apgar_1_1",  "newborn_sheet-apgar_5_1",  "Apgar_1m_below_7", "Apgar_5m_below_7", "newborn_sheet-weight_1",   "newborn_sheet-died_at_pregnancy/birth_1",  "newborn_sheet-gender_1",   "newborn_sheet-sent_to_intensive_care_1",   "newborn_sheet-delivery_type_1",    "newborn_sheet-child_internal_patient_id_1",    "bmi-numeric_result",   "BMI_above_30", "rom_description-amniotic_fluid_color", "rom_description-date_of_membranes_rupture-hours_from_reference",   "duration_of_rom_over_18h", "rom_description-membranes_rupture_type",   "fever_temperature_numeric_max_37.5-43-date_of_measurement-hours_from_reference",   "fever_temperature_numeric_max_37.5-43-numeric_result", "wbc_max-numeric_result",   "crp_max-numeric_result",   "transfers-department", "transfers-department_length_of_stay",  "readmission-admitting_department", "neuraxial_analgesia-anesthesia_type",  "surgery_indication-main_indication",   "surgery_indication-secondary_indication",  "length_of_stay_delivery_room_calculated",  "second_stage_length_calculated",   "duration_of_2nd_stage_over_4h","blood_culture_organisms",  "blood_culture_organisms_category", "Blood_culture_Type_of_growth", "Organisms_Contaminants_yes_or_no", "Organisms_Non_hemolytic_Strep_yes_or_no",  "Organisms_Enterobacterales_yes_or_no", "Organisms_GBS_yes_or_no",  "Organisms_Anaerobes_yes_or_no",    "Organisms_Other_Gram_Negatives_yes_or_no", "Organisms_Vaginal_Flora_yes_or_no",    "Organisms_Staph_Aureus_yes_or_no", "Organisms_Listeria_yes_or_no", "Organisms_Other_yes_or_no",    "Antibiotics_given_Ampicillin", "Antibiotics_given_Augmentin",  "Antibiotics_given_Carbapenem", "Antibiotics_given_Ceftriaxone",    "Antibiotics_given_Clindamycin",    "Antibiotics_given_Gentamycin", "Antibiotics_given_Metronidazole",  "Antibiotics_given_Penicillin", "Antibiotics_given_Tazocin",    "Antibiotics_given_Other",  "GBS_Result",   "Hysterectomy_done_yes_or_no",  "death_at_delivery_yes_no",   "maternal_pregestational_diabetes_yes_or_no", "maternal_gestational_diabetes_yes_or_no",  "maternal_pregestational_hypertension_yes_or_no",   "maternal_gestational_hypertension_yes_or_no",  "maternal_hellp_syndrome_yes_or_no", "maternal_pph_yes_or_no",  "blood_products_given_yes_or_no",   "Surgery_before_delivery",  "Surgery_after_delivery",   "ct_done_yes_or_no",    "drainage_done_yes_or_no",  "pH_Arteiral_Result",   "pH_Arteiral_below_7.1",    "concat_antibiotics_given", "baby_1_transfer-department_discharge_date-days_from_reference",    "baby_1_NICU_yes_or_no",    "baby_1_SGA_yes_or_no", "baby_1_LGA_yes_or_no", "baby_1_meconium_aspiration_yes_or_no", "baby_1_meconium_yes_or_no",    "baby_1_hypoglycemia_yes_or_no",    "baby_1_jaundice_yes_or_no",    "baby_1_RDS_yes_or_no", "baby_1_IVH_yes_or_no", "baby_1_PVL_yes_or_no", "baby_1_BPD_yes_or_no", "baby_1_NEC_yes_or_no", "baby_1_seizures_yes_or_no",    "baby_1_HIE_yes_or_no", "baby_1_sepsis_yes_or_no",  "baby_1_mechanical_ventilation_yes_or_no",  "neonetal_death_yes_no",    "time_from_intrapartum_fever_treatment_hours",  "time_from_intrapartum_fever_treatment_hours_abx",  "GBS_prophylactic_treatment_yes/no"])
+    data = reorder_columns(data, ["Index",  "patient_id",   "birth-age_when_documented",    "maternal_age_above_35",    "birth-birth_number",   "nulliparous_yesno",    "birth-pregnancy_number",   "birth-type_of_labor_onset",    "birth-gestational_age",    "Extremely_early_premature_labor_(GA<28)",    "Very_early_premature_labor_(28≤GA<32)",    "Moderate_early_premature_labor_(32≤GA<34)",    "Late_premature_labor_(34≤GA<37)",    "birth-birth_site",    "hospitalization_delivery-hospital_length_of_stay",    "Hospital_length_of_stay_above_3d",    "obstetric_formula-number_of_cesarean_sections_(cs)",   "obstetric_formula-number_of_vaginal_births_after_cesarean_sections_(vbac)",    "Previous_CS_yes_no",   "Previous_VBAC_yes_no","pregnancy_conceive-pregnancy_type", "newborn_sheet-apgar_1_1",  "newborn_sheet-apgar_5_1",  "Apgar_1m_below_7", "Apgar_5m_below_7", "newborn_sheet-weight_1",   "newborn_sheet-died_at_pregnancy/birth_1",  "newborn_sheet-gender_1",   "newborn_sheet-sent_to_intensive_care_1",   "newborn_sheet-delivery_type_1",    "newborn_sheet-child_internal_patient_id_1",    "bmi-numeric_result",   "BMI_above_30", "rom_description-amniotic_fluid_color", "rom_description-date_of_membranes_rupture-hours_from_reference",   "duration_of_rom_over_18h", "rom_description-membranes_rupture_type",   "fever_temperature_numeric_max_37.5-43-date_of_measurement-hours_from_reference",   "fever_temperature_numeric_max_37.5-43-numeric_result", "wbc_max-numeric_result",   "crp_max-numeric_result",   "transfers-department", "transfers-department_length_of_stay",  "readmission-admitting_department", "neuraxial_analgesia-anesthesia_type",  "surgery_indication-main_indication",   "surgery_indication-secondary_indication",  "length_of_stay_delivery_room_calculated",  "second_stage_length_calculated",   "duration_of_2nd_stage_over_4h","blood_culture_organisms",  "blood_culture_organisms_category", "Blood_culture_Type_of_growth", "Organisms_Contaminants_yes_or_no", "Organisms_Non_hemolytic_Strep_yes_or_no",  "Organisms_Enterobacterales_yes_or_no", "Organisms_GBS_yes_or_no",  "Organisms_Anaerobes_yes_or_no",    "Organisms_Other_Gram_Negatives_yes_or_no", "Organisms_Vaginal_Flora_yes_or_no",    "Organisms_Staph_Aureus_yes_or_no", "Organisms_Listeria_yes_or_no", "Organisms_Other_yes_or_no",    "Antibiotics_given_Ampicillin", "Antibiotics_given_Augmentin",  "Antibiotics_given_Carbapenem", "Antibiotics_given_Ceftriaxone",    "Antibiotics_given_Clindamycin",    "Antibiotics_given_Gentamycin", "Antibiotics_given_Metronidazole",  "Antibiotics_given_Penicillin", "Antibiotics_given_Tazocin",    "Antibiotics_given_Other",  "GBS_Result",   "Hysterectomy_done_yes_or_no",  "death_at_delivery_yes_no",   "maternal_pregestational_diabetes_yes_or_no", "maternal_gestational_diabetes_yes_or_no",  "maternal_pregestational_hypertension_yes_or_no",   "maternal_gestational_hypertension_yes_or_no",  "maternal_hellp_syndrome_yes_or_no", "maternal_pph_yes_or_no",  "blood_products_given_yes_or_no",   "Surgery_before_delivery",  "Surgery_after_delivery",   "ct_done_yes_or_no",    "drainage_done_yes_or_no",  "pH_Arteiral_Result",   "pH_Arteiral_below_7.1",    "concat_antibiotics_given", "baby_1_transfer-department_discharge_date-days_from_reference",    "baby_1_NICU_yes_or_no",    "baby_1_SGA_yes_or_no", "baby_1_LGA_yes_or_no", "baby_1_meconium_aspiration_yes_or_no", "baby_1_meconium_yes_or_no",    "baby_1_hypoglycemia_yes_or_no",    "baby_1_jaundice_yes_or_no",    "baby_1_RDS_yes_or_no", "baby_1_IVH_yes_or_no", "baby_1_PVL_yes_or_no", "baby_1_BPD_yes_or_no", "baby_1_NEC_yes_or_no", "baby_1_seizures_yes_or_no",    "baby_1_HIE_yes_or_no", "baby_1_sepsis_yes_or_no",  "baby_1_mechanical_ventilation_yes_or_no",  "neonetal_death_yes_no",    "time_from_intrapartum_fever_treatment_hours",  "time_from_intrapartum_fever_treatment_hours_abx",  "GBS_prophylactic_treatment_yes/no"])
+    print(f"done reordering columns")
 
     save_data(data, output_filepath)
     #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
