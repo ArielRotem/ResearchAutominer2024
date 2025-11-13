@@ -1305,6 +1305,266 @@ def count_unique_growths_by_dfr(
 
     return out
 
+
+
+def evaluate_appropriate_antibiotic_treatment(
+    originalData,
+    # Antibiotic columns (time in HOURS from reference)
+    abx_med_col="antibiotics-medication_1",
+    abx_time_col="antibiotics-date administered-hours from reference_1",
+    abx_step_size=3,
+    abx_num_steps=108,
+    # Growth (culture) columns (time in DAYS from reference)
+    growth_org_col="cultures-organism detected_1",
+    growth_time_col="cultures-collection date-days from reference_1",
+    growth_step_size=8,
+    growth_num_steps=61,
+    # Susceptibility columns
+    susc_abx_col="organisms susceptability-antibiotic_1",
+    susc_micro_col="organisms susceptability-microorganism_1",
+    susc_interp_col="organisms susceptability-susceptibility interpretation_1",
+    susc_step_size=5,
+    susc_num_steps=65,
+    # Time window in HOURS (these will be compared in hours)
+    timeframe_before_hours=0.0,   # hours before antibiotic (default 0)
+    timeframe_after_hours=72.0,   # hours after antibiotic (default 72)
+    # Output column names
+    raw_output_col="abx_growth_susceptibility_raw",
+    per_growth_output_col="abx_growth_susceptibility_by_growth",
+    overall_output_col="abx_appropriate_treatment_overall"
+):
+    """
+    For each row (patient):
+      1. Iterate over all antibiotic administrations.
+      2. For each antibiotic (time in HOURS from reference), find all growths
+         (cultures, time in DAYS from reference) whose collection time, when
+         converted to HOURS, is within this window:
+
+             [abx_time_hours - timeframe_before_hours,
+              abx_time_hours + timeframe_after_hours]
+
+      3. For each (antibiotic, growth) pair, look up the susceptibility result
+         in the organisms susceptibility block by matching BOTH:
+            - antibiotic name
+            - microorganism name
+
+      4. Aggregate the results into three new columns:
+            - raw_output_col:
+                A semicolon-separated list of
+                "ANTIBIOTIC | ORGANISM | S/I/R"
+            - per_growth_output_col:
+                For each unique organism, one S/I/R based on all pairs for that
+                organism in this row (S dominates, then I, then R).
+                Represented as a comma-separated string, e.g. "S,S,R".
+            - overall_output_col:
+                "S" if ANY organism has S
+                "R" if there are organisms but NONE have S (only I/R)
+                "" (empty string) if no usable susceptibility pairs exist.
+
+    Notes:
+    - Antibiotic times are in HOURS, growth times are in DAYS.
+      Growth times are converted to hours internally by multiplying by 24.
+    - timeframe_before_hours and timeframe_after_hours are in HOURS.
+    """
+
+    data = originalData.copy()
+
+    # Resolve base indices (allow passing either column names or indices)
+    abx_med_start = column_name_to_index(data, abx_med_col) if isinstance(abx_med_col, str) else abx_med_col
+    abx_time_start = column_name_to_index(data, abx_time_col) if isinstance(abx_time_col, str) else abx_time_col
+
+    growth_org_start = column_name_to_index(data, growth_org_col) if isinstance(growth_org_col, str) else growth_org_col
+    growth_time_start = column_name_to_index(data, growth_time_col) if isinstance(growth_time_col, str) else growth_time_col
+
+    susc_abx_start = column_name_to_index(data, susc_abx_col) if isinstance(susc_abx_col, str) else susc_abx_col
+    susc_micro_start = column_name_to_index(data, susc_micro_col) if isinstance(susc_micro_col, str) else susc_micro_col
+    susc_interp_start = column_name_to_index(data, susc_interp_col) if isinstance(susc_interp_col, str) else susc_interp_col
+
+    def _normalize_microorganism(name):
+        return str(name).strip().upper()
+
+    def _parse_numeric(val):
+        """
+        Tries to parse a numeric value as float (days, hours, etc.).
+        Returns None if parsing fails or value is empty.
+        """
+        if pd.isna(val):
+            return None
+        s = str(val).strip()
+        if s == "":
+            return None
+        try:
+            return float(s)
+        except Exception:
+            return None
+
+    # These will be filled row-by-row and assigned as new columns at the end
+    raw_results_all_rows = []
+    per_growth_results_all_rows = []
+    overall_results_all_rows = []
+
+    # Main per-row loop
+    for _, row in data.iterrows():
+        # 1) Collect all growth events (organism + time in HOURS)
+        growth_events = []  # list of dicts: { "org_raw", "org_key", "time_hours" }
+        for step in range(growth_num_steps):
+            org_col_idx = growth_org_start + step * growth_step_size
+            time_col_idx = growth_time_start + step * growth_step_size
+
+            # If we run past the available columns, stop early
+            if org_col_idx >= len(data.columns) or time_col_idx >= len(data.columns):
+                break
+
+            org_val = row.iloc[org_col_idx]
+            if pd.isna(org_val) or str(org_val).strip() == "":
+                continue
+
+            time_days = _parse_numeric(row.iloc[time_col_idx])
+            if time_days is None:
+                continue
+
+            # Convert growth time from DAYS to HOURS
+            time_hours = time_days * 24.0
+
+            org_key = _normalize_microorganism(org_val)
+            growth_events.append({
+                "org_raw": org_val,
+                "org_key": org_key,
+                "time_hours": time_hours
+            })
+
+        # 2) Build susceptibility map: (abx_key, org_key) -> list of S/I/R
+        susc_map = defaultdict(list)
+        for step in range(susc_num_steps):
+            abx_col_idx = susc_abx_start + step * susc_step_size
+            micro_col_idx = susc_micro_start + step * susc_step_size
+            interp_col_idx = susc_interp_start + step * susc_step_size
+
+            if interp_col_idx >= len(data.columns):
+                break
+
+            abx_val = row.iloc[abx_col_idx]
+            micro_val = row.iloc[micro_col_idx]
+            interp_val = row.iloc[interp_col_idx]
+
+            if pd.isna(abx_val) or str(abx_val).strip() == "":
+                continue
+            if pd.isna(micro_val) or str(micro_val).strip() == "":
+                continue
+            if pd.isna(interp_val) or str(interp_val).strip() == "":
+                continue
+
+            abx_key = _sanitize_antibiotic_name(abx_val)
+            micro_key = _normalize_microorganism(micro_val)
+            interp = str(interp_val).strip().upper()
+
+            if interp not in ("S", "I", "R"):
+                continue
+
+            susc_map[(abx_key, micro_key)].append(interp)
+
+        # 3) Iterate over antibiotics and match with growths in the time window (in HOURS)
+        raw_pairs_this_row = []
+        per_growth_status = {}  # org_key -> 'S'/'I'/'R' (S dominates, then I, then R)
+
+        for step in range(abx_num_steps):
+            med_col_idx = abx_med_start + step * abx_step_size
+            time_col_idx = abx_time_start + step * abx_step_size
+
+            if med_col_idx >= len(data.columns) or time_col_idx >= len(data.columns):
+                break
+
+            med_val = row.iloc[med_col_idx]
+            if pd.isna(med_val) or str(med_val).strip() == "":
+                continue
+
+            abx_key = _sanitize_antibiotic_name(med_val)
+            abx_time_hours = _parse_numeric(row.iloc[time_col_idx])
+            if abx_time_hours is None:
+                continue
+
+            # For each growth, check if it falls in the window around this antibiotic (all in HOURS)
+            for g in growth_events:
+                delta_hours = g["time_hours"] - abx_time_hours
+                if delta_hours < -timeframe_before_hours or delta_hours > timeframe_after_hours:
+                    continue
+
+                key = (abx_key, g["org_key"])
+                interps = susc_map.get(key, [])
+                if not interps:
+                    # No susceptibility record for this (abx, organism) pair
+                    continue
+
+                # Combine multiple interpretations for this pair:
+                # S > I > R  (if any S, treat as S; else if any I, treat as I; else R)
+                if any(v == "S" for v in interps):
+                    pair_status = "S"
+                elif any(v == "I" for v in interps):
+                    pair_status = "I"
+                else:
+                    pair_status = "R"
+
+                # Save raw representation
+                raw_pairs_this_row.append(
+                    f"{str(med_val).strip()} | {str(g['org_raw']).strip()} | {pair_status}"
+                )
+
+                # Update per-organism status with same priority S > I > R
+                prev_status = per_growth_status.get(g["org_key"])
+                if prev_status is None:
+                    per_growth_status[g["org_key"]] = pair_status
+                else:
+                    if "S" in (prev_status, pair_status):
+                        per_growth_status[g["org_key"]] = "S"
+                    elif "I" in (prev_status, pair_status):
+                        per_growth_status[g["org_key"]] = "I"
+                    else:
+                        per_growth_status[g["org_key"]] = "R"
+
+        # 4) Build outputs for this row
+
+        # 4a) Raw pairs
+        if raw_pairs_this_row:
+            raw_results_all_rows.append("; ".join(raw_pairs_this_row))
+        else:
+            raw_results_all_rows.append("")
+
+        # 4b) Per-growth S/I/R string
+        if per_growth_status:
+            # Keep organisms in the order they first appeared as growths
+            ordered_org_keys = []
+            seen_orgs = set()
+            for g in growth_events:
+                ok = g["org_key"]
+                if ok in per_growth_status and ok not in seen_orgs:
+                    ordered_org_keys.append(ok)
+                    seen_orgs.add(ok)
+
+            per_growth_flags = [per_growth_status[ok] for ok in ordered_org_keys]
+            per_growth_results_all_rows.append(",".join(per_growth_flags))
+
+            # 4c) Overall result: S if ANY S, else R (since we have at least one organism),
+            #     "" only if there were no per-growth statuses at all (handled above).
+            if "S" in per_growth_flags:
+                overall_results_all_rows.append("S")
+            else:
+                overall_results_all_rows.append("R")
+        else:
+            per_growth_results_all_rows.append("")
+            overall_results_all_rows.append("")
+
+    # Assign new columns
+    data[raw_output_col] = raw_results_all_rows
+    data[per_growth_output_col] = per_growth_results_all_rows
+    data[overall_output_col] = overall_results_all_rows
+
+    print(
+        f"Columns '{raw_output_col}', '{per_growth_output_col}', and "
+        f"'{overall_output_col}' added (appropriate antibiotic treatment evaluation)."
+    )
+    return data
+
+
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
     "ACINETOBACTER BAUMANNII-CALCOCETICUS COMPLEX": "Other Gram Negatives",
@@ -2052,6 +2312,28 @@ def main():
         organism_dict=organism_dict,
         map_column_name="organism_counts_map",
         prefix_for_columns="unique_"
+    )
+
+    data = evaluate_appropriate_antibiotic_treatment(
+        data,
+        abx_med_col="antibiotics-medication_1",
+        abx_time_col="antibiotics-date administered-hours from reference_1",
+        abx_step_size=3,
+        abx_num_steps=108,
+        growth_org_col="cultures-organism detected_1",
+        growth_time_col="cultures-collection date-days from reference_1",
+        growth_step_size=8,
+        growth_num_steps=61,
+        susc_abx_col="organisms susceptability-antibiotic_1",
+        susc_micro_col="organisms susceptability-microorganism_1",
+        susc_interp_col="organisms susceptability-susceptibility interpretation_1",
+        susc_step_size=5,
+        susc_num_steps=65,
+        timeframe_before_hours=0,
+        timeframe_after_hours=72,
+        raw_output_col="abx_growth_susceptibility_raw",
+        per_growth_output_col="abx_growth_susceptibility_by_growth",
+        overall_output_col="abx_appropriate_treatment_overall"
     )
 
     # Remove specified columns, including single columns and ranges
