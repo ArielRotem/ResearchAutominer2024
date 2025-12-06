@@ -1334,42 +1334,6 @@ def evaluate_appropriate_antibiotic_treatment(
 ):
     """
     Growth-centric evaluation of appropriate antibiotic treatment.
-
-    For each row (patient):
-      1. Collect growth events from cultures-*:
-            - Split multi-organism strings on ';'
-            - Each organism becomes its own growth event
-            - Culture time is in DAYS from reference -> convert to HOURS
-
-      2. Collect antibiotic administrations:
-            - Name (sanitized with _sanitize_antibiotic_name)
-            - Time in HOURS from reference
-
-      3. Build susceptibility map from organisms susceptability-*:
-            (sanitized_antibiotic, normalized_microorganism) -> [S/I/R]
-
-      4. For each growth event:
-            - Find all antibiotics in [growth_time_hours - timeframe_before_hours,
-                                      growth_time_hours + timeframe_after_hours]
-            - For each (growth, antibiotic) pair:
-                * If susceptibility exists: aggregate S/I/R with priority S > I > R
-                * If no susceptibility exists: status = "X" (unknown)
-            - Keep UNIQUE raw pairs (ABX | ORGANISM | STATUS)
-
-      Outputs:
-        - raw_output_col:
-            Semicolon-separated unique strings:
-                "ANTIBIOTIC | ORGANISM | S/I/R/X"
-
-        - per_growth_output_col:
-            For each unique organism with at least one antibiotic in window:
-                one S/I/R/X summarizing all its pairs (priority S > I > R > X),
-                joined by commas in order of appearance in cultures.
-
-        - overall_output_col:
-            "1" if ALL organisms are "S"
-            "0" if at least one is I/R/X
-            "" if there were no (growth, antibiotic) pairs at all.
     """
 
     data = originalData.copy()
@@ -1576,12 +1540,73 @@ def evaluate_appropriate_antibiotic_treatment(
     data[per_growth_output_col] = per_growth_results_all_rows
     data[overall_output_col] = overall_results_all_rows
 
+    # ============================================================
+    # =============== NEW MINIMAL ADDITION BELOW =================
+    # ============================================================
+
+    # Parse each row's raw triplets into grouped structure
+    parsed_by_row = []
+    max_growths = 0
+
+    for cell in data[raw_output_col].fillna("").astype(str):
+        if cell.strip() == "":
+            parsed_by_row.append(([], []))
+            continue
+
+        trips = [t.strip() for t in cell.split(";") if t.strip()]
+        grouped = {}
+        order = []
+
+        for t in trips:
+            parts = [p.strip() for p in t.split("|")]
+            if len(parts) != 3:
+                continue
+            abx_raw, org_raw, status_raw = parts
+            status_raw = status_raw.upper()
+            disp = "N/A" if status_raw == "X" else status_raw
+
+            if org_raw not in grouped:
+                grouped[org_raw] = []
+                order.append(org_raw)
+
+            grouped[org_raw].append((abx_raw, disp))
+
+        names = order
+        lists = [grouped[g] for g in order]
+
+        parsed_by_row.append((names, lists))
+        max_growths = max(max_growths, len(names))
+
+    # Create two dynamic columns per growth
+    for i in range(max_growths):
+        name_col = []
+        abx_col = []
+
+        for (names, lists) in parsed_by_row:
+            if i < len(names):
+                name_val = names[i]
+                abx_lines = [f"{abx} - {st}" for abx, st in lists[i]]
+                abx_val = "\n".join(abx_lines)
+            else:
+                name_val = ""
+                abx_val = ""
+
+            name_col.append(name_val)
+            abx_col.append(abx_val)
+
+        data[f"abx_growth_{i+1}_name"] = name_col
+        data[f"abx_growth_{i+1}_abx"] = abx_col
+
+    # ============================================================
+    # =============== END OF MINIMAL ADDITION ====================
+    # ============================================================
+
     print(
         f"Columns '{raw_output_col}', '{per_growth_output_col}', and "
         f"'{overall_output_col}' added (growth-centric appropriate treatment evaluation)."
+        f"Dynamic abx_growth_N_* columns also created."
     )
     return data
-
 
 
 organism_dict = {
