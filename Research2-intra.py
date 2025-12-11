@@ -86,7 +86,7 @@ def update_dataframe(originalData, col1, words1, logical_op, col2, words2, col3,
         if return_values:
             if dictionary:
                 # Replace values based on dictionary with default value "Other" if key not found
-                concatenated_results = [dictionary.get(item, "Uncategorized") for item in concatenated_results]
+                concatenated_results = [dictionary.get(item.strip(), "Uncategorized") for item in concatenated_results]
 
             if unique:
                 # Deduplicate by converting to set and back to list
@@ -1586,7 +1586,7 @@ def evaluate_appropriate_antibiotic_treatment(
             if i < len(names):
                 name_val = names[i]
                 abx_lines = [f"{abx} - {st}" for abx, st in lists[i]]
-                abx_val = "\n".join(abx_lines)
+                abx_val = ", \n".join(abx_lines)
             else:
                 name_val = ""
                 abx_val = ""
