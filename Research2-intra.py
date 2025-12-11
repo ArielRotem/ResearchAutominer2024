@@ -1547,7 +1547,7 @@ def evaluate_appropriate_antibiotic_treatment(
     # Parse each row's raw triplets into grouped structure
     parsed_by_row = []
     max_growths = 0
-    max_abx = 0   # NEW: track max antibiotics per growth
+    max_abx = 0   # track max antibiotics per growth
 
     for cell in data[raw_output_col].fillna("").astype(str):
         if cell.strip() == "":
@@ -1575,59 +1575,58 @@ def evaluate_appropriate_antibiotic_treatment(
         names = order
         lists = [grouped[g] for g in order]
 
-        # track maxima
         max_growths = max(max_growths, len(names))
         for abx_list in lists:
             max_abx = max(max_abx, len(abx_list))
 
         parsed_by_row.append((names, lists))
 
+    # Status → numeric mapping
+    status_to_num = {"S": 0, "I": 1, "R": 2, "N/A": 3}
+
     # Create dynamic columns:
     # growth_i_name
     # growth_i_abx_k
     # growth_i_abx_k_status
+    # growth_i_abx_k_status_numeric  <-- NEW
 
     for i in range(max_growths):
-        # column containers
         name_col = []
 
-        # For each ABX index we build *two* columns
         abx_cols = [[] for _ in range(max_abx)]
         status_cols = [[] for _ in range(max_abx)]
+        numeric_cols = [[] for _ in range(max_abx)]   # NEW
 
         for (names, lists) in parsed_by_row:
             if i < len(names):
-                # growth name
                 name_val = names[i]
-
-                # ABX list for this growth
                 abx_list = lists[i]
 
-                # Fill antibiotics/status columns
                 for k in range(max_abx):
                     if k < len(abx_list):
                         abx_raw, status_raw = abx_list[k]
-                        abx_cols[k].append(abx_raw)          # raw ABX name
-                        status_cols[k].append(status_raw)    # S / R / I / N/A
+                        abx_cols[k].append(abx_raw)
+                        status_cols[k].append(status_raw)
+                        numeric_cols[k].append(status_to_num.get(status_raw, 3))
                     else:
                         abx_cols[k].append("")
                         status_cols[k].append("")
+                        numeric_cols[k].append("")
             else:
-                # no such growth for this row → fill blanks
                 name_val = ""
                 for k in range(max_abx):
                     abx_cols[k].append("")
                     status_cols[k].append("")
+                    numeric_cols[k].append("")
 
             name_col.append(name_val)
 
-        # Write growth_i_name column
-        data[f"abx_growth_{i+1}_name"] = name_col
+        data[f"growth_{i+1}_name"] = name_col
 
-        # Write growth_i_abx_k and growth_i_abx_k_status columns
         for k in range(max_abx):
-            data[f"abx_growth_{i+1}_abx_{k+1}"] = abx_cols[k]
-            data[f"abx_growth_{i+1}_abx_{k+1}_status"] = status_cols[k]
+            data[f"growth_{i+1}_abx_{k+1}"] = abx_cols[k]
+            data[f"growth_{i+1}_abx_{k+1}_status"] = status_cols[k]
+            data[f"growth_{i+1}_abx_{k+1}_status_numeric"] = numeric_cols[k]   # NEW
 
     # ============================================================
     # =============== END OF MINIMAL ADDITION ====================
