@@ -1639,6 +1639,204 @@ def evaluate_appropriate_antibiotic_treatment(
     )
     return data
 
+def create_growth_centric_dataset_smart(data, output_file="growth_centric_smart_analysis.csv"):
+    """
+    SMART Version:
+    - Row per Growth.
+    - Matches Treatments to Susceptibility results.
+    - Columns: 
+        1. Growth Name/Date
+        2. Demographics
+        3. For each Antibiotic in the panel:
+           - [Abx]_Res: S/R/I
+           - [Abx]_Date_Given: Date (if treated)
+    """
+    print("Starting generation of SMART Growth-Centric Dataset...")
+    
+    # 1. Context Columns (Demographics)
+    keep_cols = [
+        "patient id", "birth-age_when_documented", "birth-gestational_age", 
+        "maternal_age_above_35", "fever_temperature_numeric_max_37.5-43-numeric_result",
+        "birth-type_of_labor_onset", "birth-birth_site", "surgery_indication-type_of_surgery",
+        "time_from_intrapartum_fever_treatment_hours"
+    ]
+    base_cols = [c for c in keep_cols if c in data.columns]
+
+    # 2. Batch Indices
+    # Growth
+    growth_name_idx = column_name_to_index(data, "cultures-organism detected_1")
+    growth_date_idx = column_name_to_index(data, "cultures-collection date-days from reference_1")
+    growth_steps, growth_step_size = 61, 8
+    
+    # Susceptibility
+    susc_abx_idx = column_name_to_index(data, "organisms susceptability-antibiotic_1")
+    susc_org_idx = column_name_to_index(data, "organisms susceptability-microorganism_1")
+    susc_res_idx = column_name_to_index(data, "organisms susceptability-susceptibility interpretation_1")
+    susc_steps, susc_step_size = 65, 5
+    
+    # Treatments (Given)
+    tx_med_idx = column_name_to_index(data, "antibiotics-medication_1")
+    tx_date_idx = column_name_to_index(data, "antibiotics-date administered_1")
+    tx_steps, tx_step_size = 108, 3
+
+    new_rows = []
+
+    for idx, row in data.iterrows():
+        
+        # --- A. Build Treatment Lookup for this Patient ---
+        # Dictionary: { Normalized_Abx_Name : First_Date_Given }
+        tx_map = {}
+        for i in range(tx_steps):
+            m_idx = tx_med_idx + (i * tx_step_size)
+            d_idx = tx_date_idx + (i * tx_step_size)
+            if m_idx >= len(row): break
+            
+            raw_med = str(row.iloc[m_idx]).strip()
+            raw_date = str(row.iloc[d_idx]).strip()
+            
+            if raw_med and raw_med not in ["", "nan", "None"]:
+                norm_name = _sanitize_antibiotic_name(raw_med) # NORMALIZE
+                if norm_name and norm_name not in tx_map:
+                    tx_map[norm_name] = raw_date # Store first date found
+        
+        # --- B. Build Susceptibility Map ---
+        # Dictionary: Organism -> { Normalized_Abx_Name : Result }
+        susc_map = defaultdict(dict)
+        for i in range(susc_steps):
+            o_idx = susc_org_idx + (i * susc_step_size)
+            a_idx = susc_abx_idx + (i * susc_step_size)
+            r_idx = susc_res_idx + (i * susc_step_size)
+            if r_idx >= len(row): break
+            
+            s_org = str(row.iloc[o_idx]).strip().upper()
+            raw_abx = str(row.iloc[a_idx]).strip()
+            s_res = str(row.iloc[r_idx]).strip()
+            
+            if s_org and raw_abx and s_res:
+                norm_abx = _sanitize_antibiotic_name(raw_abx) # NORMALIZE
+                susc_map[s_org][norm_abx] = s_res
+
+        # --- C. Iterate Growths ---
+        for i in range(growth_steps):
+            g_name_i = growth_name_idx + (i * growth_step_size)
+            g_date_i = growth_date_idx + (i * growth_step_size)
+            if g_name_i >= len(row): break
+            
+            growth_name = str(row.iloc[g_name_i]).strip()
+            growth_date = str(row.iloc[g_date_i]).strip()
+            
+            # VALID GROWTH FOUND
+            if growth_name and growth_name not in ["", "nan", "None", "0"]:
+                new_row = {col: row[col] for col in base_cols}
+                new_row['Target_Growth_Name'] = growth_name
+                new_row['Target_Growth_Date'] = growth_date
+                
+                # Check Susceptibility for this specific organism
+                my_susc = susc_map.get(growth_name.upper(), {})
+                
+                # For every antibiotic tested in the panel, add 2 columns
+                for abx_norm, result in my_susc.items():
+                    # 1. The Result (S/R/I)
+                    new_row[f"{abx_norm}_Res"] = result
+                    
+                    # 2. The Treatment Date (Look up in tx_map)
+                    date_given = tx_map.get(abx_norm, "") # Empty if not treated
+                    new_row[f"{abx_norm}_Date_Given"] = date_given
+                
+                new_rows.append(new_row)
+
+    output_df = pd.DataFrame(new_rows)
+    output_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+    print(f"Smart Growth-Centric dataset saved to {output_file} ({len(output_df)} rows).")
+
+def create_growth_centric_dataset_raw(data, output_file="growth_centric_RAW_for_review.csv"):
+    """
+    RAW Version:
+    - Splits patient into multiple rows (one per growth).
+    - Cols: [Specific Growth Batch (8 cols)] + [Demographics] + [ALL Abx Cols] + [ALL Susc Cols]
+    """
+    print("Starting generation of RAW Growth-Centric Dataset...")
+
+    # 1. Define Context Columns
+    demographic_cols = [
+        "patient id", "birth-age_when_documented", "birth-gestational_age", 
+        "maternal_age_above_35", "birth-type_of_labor_onset",
+        "birth-birth_site", "surgery_indication-type_of_surgery",
+        "fever_temperature_numeric_max_37.5-43-numeric_result",
+        "time_from_intrapartum_fever_treatment_hours"
+    ]
+    valid_demo_cols = [c for c in demographic_cols if c in data.columns]
+    
+    # Grab ALL original Abx & Susc columns
+    abx_cols = [c for c in data.columns if "antibiotics-medication" in c or "antibiotics-date administered" in c]
+    susc_cols = [c for c in data.columns if "organisms susceptability" in c]
+    
+    context_cols = valid_demo_cols + abx_cols + susc_cols
+
+    # 2. Batch Config
+    try:
+        # We start at 'test type' to capture the full 8-column growth batch
+        batch_start_idx = column_name_to_index(data, "cultures-test type_1")
+        # 'Organism detected' is usually +2, used for validation
+        org_check_idx = column_name_to_index(data, "cultures-organism detected_1")
+    except KeyError:
+        print("Error: Could not find culture columns.")
+        return
+
+    growth_steps = 61
+    growth_step_size = 8
+    
+    # 3. Create Clean Headers for the 8-col batch
+    batch_headers_clean = []
+    for i in range(8):
+        # Grab original name (e.g., "cultures-test type_1")
+        col_name = data.columns[batch_start_idx + i]
+        # Clean: "Target_Growth_test type"
+        clean_name = col_name.replace("_1", "").replace("cultures-", "Target_Growth_")
+        batch_headers_clean.append(clean_name)
+
+    new_rows = []
+
+    for idx, row in data.iterrows():
+        for i in range(growth_steps):
+            curr_batch_start = batch_start_idx + (i * growth_step_size)
+            curr_org_check = org_check_idx + (i * growth_step_size)
+            
+            if curr_batch_start + 8 > len(row): break
+
+            # Valid Growth?
+            growth_name = str(row.iloc[curr_org_check]).strip()
+            if growth_name and growth_name not in ["", "nan", "None", "0"]:
+                
+                new_row = {}
+                
+                # A. The 8 Specific Growth Columns
+                for offset in range(8):
+                    val = row.iloc[curr_batch_start + offset]
+                    new_row[batch_headers_clean[offset]] = val
+
+                # B. The Context
+                for col in context_cols:
+                    new_row[col] = row[col]
+                
+                new_rows.append(new_row)
+
+    output_df = pd.DataFrame(new_rows)
+    
+    # Reorder to put Target cols first
+    if not output_df.empty:
+        cols = list(output_df.columns)
+        for h in reversed(batch_headers_clean):
+            if h in cols: cols.insert(0, cols.pop(cols.index(h)))
+        if "patient id" in cols:
+            cols.insert(0, cols.pop(cols.index("patient id")))
+        output_df = output_df[cols]
+        
+        output_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        print(f"RAW Growth-Centric dataset saved to {output_file} ({len(output_df)} rows).")
+
+    return output_df
+
 
 organism_dict = {
     "ACINETOBACTER SPECIES": "Other Gram Negatives",
@@ -2498,6 +2696,16 @@ def main():
     data = reorder_columns(data, ["Index",  "patient_id",   "birth-age_when_documented",    "maternal_age_above_35",    "birth-birth_number",   "nulliparous_yesno",    "birth-pregnancy_number",   "birth-type_of_labor_onset",    "birth-gestational_age",    "Extremely_early_premature_labor_(GA<28)",    "Very_early_premature_labor_(28≤GA<32)",    "Moderate_early_premature_labor_(32≤GA<34)",    "Late_premature_labor_(34≤GA<37)",    "birth-birth_site",    "hospitalization_delivery-hospital_length_of_stay",    "Hospital_length_of_stay_above_3d",    "obstetric_formula-number_of_cesarean_sections_(cs)",   "obstetric_formula-number_of_vaginal_births_after_cesarean_sections_(vbac)",    "Previous_CS_yes_no",   "Previous_VBAC_yes_no","pregnancy_conceive-pregnancy_type", "newborn_sheet-apgar_1_1",  "newborn_sheet-apgar_5_1",  "Apgar_1m_below_7", "Apgar_5m_below_7", "newborn_sheet-weight_1",   "newborn_sheet-died_at_pregnancy/birth_1",  "newborn_sheet-gender_1",   "newborn_sheet-sent_to_intensive_care_1",   "newborn_sheet-delivery_type_1",    "newborn_sheet-child_internal_patient_id_1",    "bmi-numeric_result",   "BMI_above_30", "rom_description-amniotic_fluid_color", "rom_description-date_of_membranes_rupture-hours_from_reference",   "duration_of_rom_over_18h", "rom_description-membranes_rupture_type",   "fever_temperature_numeric_max_37.5-43-date_of_measurement-hours_from_reference",   "fever_temperature_numeric_max_37.5-43-numeric_result", "wbc_max-numeric_result",   "crp_max-numeric_result",   "transfers-department", "transfers-department_length_of_stay",  "readmission-admitting_department", "neuraxial_analgesia-anesthesia_type",  "surgery_indication-main_indication",   "surgery_indication-secondary_indication",  "length_of_stay_delivery_room_calculated",  "second_stage_length_calculated",   "duration_of_2nd_stage_over_4h","blood_culture_organisms",  "blood_culture_organisms_category", "Blood_culture_Type_of_growth", "Organisms_Contaminants_yes_or_no", "Organisms_Non_hemolytic_Strep_yes_or_no",  "Organisms_Enterobacterales_yes_or_no", "Organisms_GBS_yes_or_no",  "Organisms_Anaerobes_yes_or_no",    "Organisms_Other_Gram_Negatives_yes_or_no", "Organisms_Vaginal_Flora_yes_or_no",    "Organisms_Staph_Aureus_yes_or_no", "Organisms_Listeria_yes_or_no", "Organisms_Other_yes_or_no",    "Antibiotics_given_Ampicillin", "Antibiotics_given_Augmentin",  "Antibiotics_given_Carbapenem", "Antibiotics_given_Ceftriaxone",    "Antibiotics_given_Clindamycin",    "Antibiotics_given_Gentamycin", "Antibiotics_given_Metronidazole",  "Antibiotics_given_Penicillin", "Antibiotics_given_Tazocin",    "Antibiotics_given_Other",  "GBS_Result",   "Hysterectomy_done_yes_or_no",  "death_at_delivery_yes_no",   "maternal_pregestational_diabetes_yes_or_no", "maternal_gestational_diabetes_yes_or_no",  "maternal_pregestational_hypertension_yes_or_no",   "maternal_gestational_hypertension_yes_or_no",  "maternal_hellp_syndrome_yes_or_no", "maternal_pph_yes_or_no",  "blood_products_given_yes_or_no",   "Surgery_before_delivery",  "Surgery_after_delivery",   "ct_done_yes_or_no",    "drainage_done_yes_or_no",  "pH_Arteiral_Result",   "pH_Arteiral_below_7.1",    "concat_antibiotics_given", "baby_1_transfer-department_discharge_date-days_from_reference",    "baby_1_NICU_yes_or_no",    "baby_1_SGA_yes_or_no", "baby_1_LGA_yes_or_no", "baby_1_meconium_aspiration_yes_or_no", "baby_1_meconium_yes_or_no",    "baby_1_hypoglycemia_yes_or_no",    "baby_1_jaundice_yes_or_no",    "baby_1_RDS_yes_or_no", "baby_1_IVH_yes_or_no", "baby_1_PVL_yes_or_no", "baby_1_BPD_yes_or_no", "baby_1_NEC_yes_or_no", "baby_1_seizures_yes_or_no",    "baby_1_HIE_yes_or_no", "baby_1_sepsis_yes_or_no",  "baby_1_mechanical_ventilation_yes_or_no",  "neonetal_death_yes_no",    "time_from_intrapartum_fever_treatment_hours",  "time_from_intrapartum_fever_treatment_hours_abx",  "GBS_prophylactic_treatment_yes/no"])
     print(f"done reordering columns")
 
+    # --- INSERT THIS BLOCK ---
+    
+    # 1. Generate Smart Analysis (Matches Treatment Dates to Susceptibility)
+    create_growth_centric_dataset_smart(data, output_file="output_smart_growth_analysis.csv")
+
+    # 2. Generate Raw Review File (Full 8-col growth batch + Full Context)
+    create_growth_centric_dataset_raw(data, output_file="output_raw_growth_review.csv")
+    
+    # -------------------------
+    
     save_data(data, output_filepath)
     #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
 
