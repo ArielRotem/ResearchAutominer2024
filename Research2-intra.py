@@ -1675,7 +1675,7 @@ def create_growth_centric_dataset_smart_v3(data, output_file="growth_centric_sma
     # C. Treatments Given (108 steps, 3 cols each)
     # We need the numeric hours to compare with growth time
     tx_med_idx = column_name_to_index(data, "antibiotics-medication_1")
-    tx_date_str_idx = column_name_to_index(data, "antibiotics-date administered_1")
+    tx_date_str_idx = column_name_to_index(data, "antibiotics-date administered _1")
     tx_date_hrs_idx = column_name_to_index(data, "antibiotics-date administered-hours from reference_1") # HOURS
     tx_steps, tx_step_size = 108, 3
 
@@ -1858,6 +1858,213 @@ def create_growth_centric_dataset_smart_v3(data, output_file="growth_centric_sma
     output_df.to_csv(output_file, index=False, encoding='utf-8-sig')
     print(f"Smart Growth-Centric dataset saved to {output_file}")
     return output_df
+
+
+def create_growth_centric_dataset_smart_v9(data, output_file="growth_centric_smart_analysis_final.csv"):
+    """
+    SMART Version V9 (No Dictionary, No Matching):
+    1. Row per Growth.
+    2. TREATMENT COLUMNS: Scans [-10h, +72h] window.
+       - Copies RAW Name, Date, and Hours for every valid entry.
+    3. SUSCEPTIBILITY COLUMNS: Lists all lab results independently.
+    """
+    print("Starting generation of SMART Growth-Centric Dataset V9 (Pure Time Filter)...")
+
+    # 1. Context Columns
+    keep_cols = [
+        "patient id"
+    ]
+    base_cols = [c for c in keep_cols if c in data.columns]
+
+    # 2. Batch Indices
+    growth_name_idx = column_name_to_index(data, "cultures-organism detected_1")
+    growth_date_idx = column_name_to_index(data, "cultures-collection date-days from reference_1")
+    growth_steps, growth_step_size = 61, 8
+    
+    susc_abx_idx = column_name_to_index(data, "organisms susceptability-antibiotic_1")
+    susc_org_idx = column_name_to_index(data, "organisms susceptability-microorganism_1")
+    susc_res_idx = column_name_to_index(data, "organisms susceptability-susceptibility interpretation_1")
+    susc_steps, susc_step_size = 65, 5
+    
+    tx_med_idx = column_name_to_index(data, "antibiotics-medication_1")
+    tx_date_str_idx = column_name_to_index(data, "antibiotics-date administered _1") 
+    tx_date_hrs_idx = column_name_to_index(data, "antibiotics-date administered-hours from reference_1") 
+    tx_steps, tx_step_size = 108, 3
+
+    # Timeframe Window (Hours)
+    WINDOW_PRE = 10 
+    WINDOW_POST = 10
+
+    new_rows = []
+    
+    # Stats
+    stats_patients_with_growth = set()
+    stats_max_relevant_tx = 0 
+    stats_max_susc_multiplicity = 1 
+
+    for idx, row in data.iterrows():
+        patient_id = row["patient id"]
+
+        # --- A. Pre-load ALL Treatments for this Patient ---
+        patient_treatments = []
+        
+        for i in range(tx_steps):
+            m_idx = tx_med_idx + (i * tx_step_size)
+            d_str_idx = tx_date_str_idx + (i * tx_step_size)
+            d_hrs_idx = tx_date_hrs_idx + (i * tx_step_size)
+            
+            if m_idx >= len(row): break
+            
+            raw_med = row.iloc[m_idx]
+            if pd.notna(raw_med) and str(raw_med).strip() not in ["", "nan", "None", "0"]:
+                
+                try:
+                    hrs_val = float(row.iloc[d_hrs_idx])
+                except (ValueError, TypeError):
+                    hrs_val = None 
+                
+                date_str = str(row.iloc[d_str_idx]).strip()
+                
+                # Store strictly raw data + numeric time for filtering
+                patient_treatments.append({
+                    "raw_name": str(raw_med).strip(),
+                    "date_str": date_str,
+                    "hours_val": hrs_val,
+                    "hours_str": str(row.iloc[d_hrs_idx]) 
+                })
+
+        # --- B. Build Susceptibility Map ---
+        # Map: Organism -> { Raw_Lab_Abx_Name : [Result1, Result2...] }
+        susc_map = defaultdict(lambda: defaultdict(list))
+        for i in range(susc_steps):
+            o_idx = susc_org_idx + (i * susc_step_size)
+            a_idx = susc_abx_idx + (i * susc_step_size)
+            r_idx = susc_res_idx + (i * susc_step_size)
+            if r_idx >= len(row): break
+            
+            s_org = row.iloc[o_idx]
+            raw_abx = row.iloc[a_idx]
+            s_res = row.iloc[r_idx]
+            
+            if pd.notna(s_org) and pd.notna(raw_abx) and pd.notna(s_res):
+                s_org_str = str(s_org).strip().upper()
+                raw_abx_str = str(raw_abx).strip().upper() # Uppercase for consistency
+                s_res_str = str(s_res).strip().upper()
+
+                if s_org_str and raw_abx_str and s_res_str not in ["", "NAN", "NONE"]:
+                    # No sanitization, just raw lab name
+                    susc_map[s_org_str][raw_abx_str].append(s_res_str)
+
+        # --- C. Iterate Growths ---
+        patient_had_growth = False
+        
+        for i in range(growth_steps):
+            g_name_i = growth_name_idx + (i * growth_step_size)
+            g_date_i = growth_date_idx + (i * growth_step_size)
+            if g_name_i >= len(row): break
+            
+            growth_name = row.iloc[g_name_i]
+            growth_days_val = row.iloc[g_date_i] 
+            
+            if pd.notna(growth_name) and str(growth_name).strip() not in ["", "nan", "None", "0"]:
+                growth_name_str = str(growth_name).strip()
+                
+                # Calculate Growth Time in Hours
+                growth_hours = None
+                try:
+                    growth_hours = float(growth_days_val) * 24.0
+                except (ValueError, TypeError):
+                    growth_hours = None 
+                
+                patient_had_growth = True
+                
+                # --- D. EXPANDED TREATMENT COLUMNS ---
+                filtered_txs = []
+                
+                # Base Row
+                new_row = {col: row[col] for col in base_cols}
+                new_row['Target_Growth_Name'] = growth_name_str
+                new_row['Target_Growth_Date_Days'] = str(growth_days_val)
+                
+                if growth_hours is not None:
+                    window_start = growth_hours - WINDOW_PRE
+                    window_end = growth_hours + WINDOW_POST
+                    
+                    for tx in patient_treatments:
+                        if tx["hours_val"] is not None:
+                            if window_start <= tx["hours_val"] <= window_end:
+                                filtered_txs.append(tx)
+
+                    # Add Dynamic Columns (Tx_1, Tx_2...)
+                    count_relevant = len(filtered_txs)
+                    if count_relevant > stats_max_relevant_tx:
+                        stats_max_relevant_tx = count_relevant
+                    
+                    for k, tx in enumerate(filtered_txs):
+                        prefix = f"Relevant_Tx_{k+1}"
+                        new_row[f"{prefix}_Name"] = tx["raw_name"]
+                        new_row[f"{prefix}_Date"] = tx["date_str"]
+                        new_row[f"{prefix}_Hours"] = tx["hours_str"]
+
+                # --- E. Susceptibility Columns ---
+                my_susc_dict = susc_map.get(growth_name_str.upper(), {})
+                
+                for lab_abx_name, results_list in my_susc_dict.items():
+                    if len(results_list) > stats_max_susc_multiplicity:
+                        stats_max_susc_multiplicity = len(results_list)
+                    
+                    # Result Columns Only
+                    new_row[f"{lab_abx_name}_Res"] = results_list[0]
+                    for k in range(1, len(results_list)):
+                        new_row[f"{lab_abx_name}_Res_test{k+1}"] = results_list[k]
+                
+                new_rows.append(new_row)
+        
+        if patient_had_growth:
+            stats_patients_with_growth.add(patient_id)
+
+    # --- F. Finalize & Sort Columns ---
+    output_df = pd.DataFrame(new_rows)
+    
+    num_growths = len(output_df)
+    num_patients = len(stats_patients_with_growth)
+    
+    if not output_df.empty:
+        cols = list(output_df.columns)
+        
+        ordered_cols = []
+        if 'Target_Growth_Name' in cols: ordered_cols.append('Target_Growth_Name')
+        if 'Target_Growth_Date_Days' in cols: ordered_cols.append('Target_Growth_Date_Days')
+        
+        # Sort Tx Columns: Tx_1, Tx_2...
+        for k in range(1, stats_max_relevant_tx + 1):
+            prefix = f"Relevant_Tx_{k}"
+            batch = [f"{prefix}_Name", f"{prefix}_Date", f"{prefix}_Hours"]
+            for c in batch:
+                if c in cols: ordered_cols.append(c)
+        
+        remaining = [c for c in cols if c not in ordered_cols]
+        if "patient id" in remaining:
+            remaining.remove("patient id")
+            ordered_cols.insert(0, "patient id")
+            
+        final_order = ordered_cols + remaining
+        output_df = output_df.reindex(columns=final_order)
+
+    print("="*50)
+    print("      SMART ANALYSIS STATISTICS (V9 - CLEAN)      ")
+    print(f"      Filter Window: -{WINDOW_PRE}h to +{WINDOW_POST}h")
+    print("="*50)
+    print(f"Total Growth Rows: {num_growths}")
+    print(f"Unique Patients with Growth: {num_patients}")
+    print(f"Max Relevant Treatments Found for a single growth: {stats_max_relevant_tx}")
+    print(f"Max Susceptibility Tests for single Abx: {stats_max_susc_multiplicity}")
+    print("="*50)
+
+    output_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+    print(f"Smart Growth-Centric dataset saved to {output_file}")
+    return output_df
+
 
 def create_growth_centric_dataset_raw(data, output_file="growth_centric_RAW_for_review.csv"):
     """
@@ -2722,9 +2929,8 @@ def main():
 
     # --- INSERT THIS BLOCK ---
     
-    # 1. Generate Smart Analysis V3 (Time-Filtered + Multi-Test Support)
-    create_growth_centric_dataset_smart_v3(data, output_file="output_smart_growth_analysis_filtered.csv")
-
+    # 1. Generate Smart Analysis V9
+    create_growth_centric_dataset_smart_v9(data, output_file="output_smart_growth_analysis_v9.csv")
     # 2. Generate Raw Review File (Full 8-col growth batch + Full Context)
     create_growth_centric_dataset_raw(data, output_file="output_raw_growth_review.csv")
     
