@@ -1650,10 +1650,11 @@ def create_growth_centric_dataset_smart_v3(data, output_file="growth_centric_sma
 
     # 1. Context Columns (Demographics)
     keep_cols = [
-        "patient id", "birth-age_when_documented", "birth-gestational_age", 
-        "maternal_age_above_35", "fever_temperature_numeric_max_37.5-43-numeric_result",
-        "birth-type_of_labor_onset", "birth-birth_site", "surgery_indication-type_of_surgery",
-        "time_from_intrapartum_fever_treatment_hours"
+        #"patient id", "birth-age_when_documented", "birth-gestational_age", 
+        #"maternal_age_above_35", "fever_temperature_numeric_max_37.5-43-numeric_result",
+        #"birth-type_of_labor_onset", "birth-birth_site", "surgery_indication-type_of_surgery",
+        #"time_from_intrapartum_fever_treatment_hours"
+        "patient id"
     ]
     base_cols = [c for c in keep_cols if c in data.columns]
 
@@ -1868,11 +1869,12 @@ def create_growth_centric_dataset_raw(data, output_file="growth_centric_RAW_for_
 
     # 1. Define Context Columns
     demographic_cols = [
-        "patient id", "birth-age_when_documented", "birth-gestational_age", 
-        "maternal_age_above_35", "birth-type_of_labor_onset",
-        "birth-birth_site", "surgery_indication-type_of_surgery",
-        "fever_temperature_numeric_max_37.5-43-numeric_result",
-        "time_from_intrapartum_fever_treatment_hours"
+        "patient id"
+        #"patient id", "birth-age_when_documented", "birth-gestational_age", 
+        #"maternal_age_above_35", "birth-type_of_labor_onset",
+        #"birth-birth_site", "surgery_indication-type_of_surgery",
+        #"fever_temperature_numeric_max_37.5-43-numeric_result",
+        #"time_from_intrapartum_fever_treatment_hours"
     ]
     valid_demo_cols = [c for c in demographic_cols if c in data.columns]
     
@@ -2718,6 +2720,15 @@ def main():
         overall_output_col="abx_appropriate_treatment_overall"
     )
 
+    # --- INSERT THIS BLOCK ---
+    
+    # 1. Generate Smart Analysis V3 (Time-Filtered + Multi-Test Support)
+    create_growth_centric_dataset_smart_v3(data, output_file="output_smart_growth_analysis_filtered.csv")
+
+    # 2. Generate Raw Review File (Full 8-col growth batch + Full Context)
+    create_growth_centric_dataset_raw(data, output_file="output_raw_growth_review.csv")
+    
+    # -------------------------
 
     # Remove specified columns, including single columns and ranges
     data = remove_columns(data, [
@@ -2805,15 +2816,7 @@ def main():
     data = reorder_columns(data, ["Index",  "patient_id",   "birth-age_when_documented",    "maternal_age_above_35",    "birth-birth_number",   "nulliparous_yesno",    "birth-pregnancy_number",   "birth-type_of_labor_onset",    "birth-gestational_age",    "Extremely_early_premature_labor_(GA<28)",    "Very_early_premature_labor_(28≤GA<32)",    "Moderate_early_premature_labor_(32≤GA<34)",    "Late_premature_labor_(34≤GA<37)",    "birth-birth_site",    "hospitalization_delivery-hospital_length_of_stay",    "Hospital_length_of_stay_above_3d",    "obstetric_formula-number_of_cesarean_sections_(cs)",   "obstetric_formula-number_of_vaginal_births_after_cesarean_sections_(vbac)",    "Previous_CS_yes_no",   "Previous_VBAC_yes_no","pregnancy_conceive-pregnancy_type", "newborn_sheet-apgar_1_1",  "newborn_sheet-apgar_5_1",  "Apgar_1m_below_7", "Apgar_5m_below_7", "newborn_sheet-weight_1",   "newborn_sheet-died_at_pregnancy/birth_1",  "newborn_sheet-gender_1",   "newborn_sheet-sent_to_intensive_care_1",   "newborn_sheet-delivery_type_1",    "newborn_sheet-child_internal_patient_id_1",    "bmi-numeric_result",   "BMI_above_30", "rom_description-amniotic_fluid_color", "rom_description-date_of_membranes_rupture-hours_from_reference",   "duration_of_rom_over_18h", "rom_description-membranes_rupture_type",   "fever_temperature_numeric_max_37.5-43-date_of_measurement-hours_from_reference",   "fever_temperature_numeric_max_37.5-43-numeric_result", "wbc_max-numeric_result",   "crp_max-numeric_result",   "transfers-department", "transfers-department_length_of_stay",  "readmission-admitting_department", "neuraxial_analgesia-anesthesia_type",  "surgery_indication-main_indication",   "surgery_indication-secondary_indication",  "length_of_stay_delivery_room_calculated",  "second_stage_length_calculated",   "duration_of_2nd_stage_over_4h","blood_culture_organisms",  "blood_culture_organisms_category", "Blood_culture_Type_of_growth", "Organisms_Contaminants_yes_or_no", "Organisms_Non_hemolytic_Strep_yes_or_no",  "Organisms_Enterobacterales_yes_or_no", "Organisms_GBS_yes_or_no",  "Organisms_Anaerobes_yes_or_no",    "Organisms_Other_Gram_Negatives_yes_or_no", "Organisms_Vaginal_Flora_yes_or_no",    "Organisms_Staph_Aureus_yes_or_no", "Organisms_Listeria_yes_or_no", "Organisms_Other_yes_or_no",    "Antibiotics_given_Ampicillin", "Antibiotics_given_Augmentin",  "Antibiotics_given_Carbapenem", "Antibiotics_given_Ceftriaxone",    "Antibiotics_given_Clindamycin",    "Antibiotics_given_Gentamycin", "Antibiotics_given_Metronidazole",  "Antibiotics_given_Penicillin", "Antibiotics_given_Tazocin",    "Antibiotics_given_Other",  "GBS_Result",   "Hysterectomy_done_yes_or_no",  "death_at_delivery_yes_no",   "maternal_pregestational_diabetes_yes_or_no", "maternal_gestational_diabetes_yes_or_no",  "maternal_pregestational_hypertension_yes_or_no",   "maternal_gestational_hypertension_yes_or_no",  "maternal_hellp_syndrome_yes_or_no", "maternal_pph_yes_or_no",  "blood_products_given_yes_or_no",   "Surgery_before_delivery",  "Surgery_after_delivery",   "ct_done_yes_or_no",    "drainage_done_yes_or_no",  "pH_Arteiral_Result",   "pH_Arteiral_below_7.1",    "concat_antibiotics_given", "baby_1_transfer-department_discharge_date-days_from_reference",    "baby_1_NICU_yes_or_no",    "baby_1_SGA_yes_or_no", "baby_1_LGA_yes_or_no", "baby_1_meconium_aspiration_yes_or_no", "baby_1_meconium_yes_or_no",    "baby_1_hypoglycemia_yes_or_no",    "baby_1_jaundice_yes_or_no",    "baby_1_RDS_yes_or_no", "baby_1_IVH_yes_or_no", "baby_1_PVL_yes_or_no", "baby_1_BPD_yes_or_no", "baby_1_NEC_yes_or_no", "baby_1_seizures_yes_or_no",    "baby_1_HIE_yes_or_no", "baby_1_sepsis_yes_or_no",  "baby_1_mechanical_ventilation_yes_or_no",  "neonetal_death_yes_no",    "time_from_intrapartum_fever_treatment_hours",  "time_from_intrapartum_fever_treatment_hours_abx",  "GBS_prophylactic_treatment_yes/no"])
     print(f"done reordering columns")
 
-    # --- INSERT THIS BLOCK ---
-    
-    # 1. Generate Smart Analysis V3 (Time-Filtered + Multi-Test Support)
-    create_growth_centric_dataset_smart_v3(data, output_file="output_smart_growth_analysis_filtered.csv")
 
-    # 2. Generate Raw Review File (Full 8-col growth batch + Full Context)
-    create_growth_centric_dataset_raw(data, output_file="output_raw_growth_review.csv")
-    
-    # -------------------------
 
     save_data(data, output_filepath)
     #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
