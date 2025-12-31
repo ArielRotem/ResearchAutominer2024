@@ -1639,20 +1639,15 @@ def evaluate_appropriate_antibiotic_treatment(
     )
     return data
 
-def create_growth_centric_dataset_smart(data, output_file="growth_centric_smart_analysis.csv"):
+def create_growth_centric_dataset_smart_v3(data, output_file="growth_centric_smart_analysis_v3.csv"):
     """
-    SMART Version:
+    SMART Version V3:
     - Row per Growth.
-    - Matches Treatments to Susceptibility results.
-    - Columns: 
-        1. Growth Name/Date
-        2. Demographics
-        3. For each Antibiotic in the panel:
-           - [Abx]_Res: S/R/I
-           - [Abx]_Date_Given: Date (if treated)
+    - Handles Multiple Susceptibility Tests (Columns: _Res, _Res_test2...).
+    - **TIME FILTERING**: Matches Antibiotics to Growth only if given within [-10h, +72h] of culture.
     """
-    print("Starting generation of SMART Growth-Centric Dataset...")
-    
+    print("Starting generation of SMART Growth-Centric Dataset V3 (Time-Filtered)...")
+
     # 1. Context Columns (Demographics)
     keep_cols = [
         "patient id", "birth-age_when_documented", "birth-gestational_age", 
@@ -1662,92 +1657,206 @@ def create_growth_centric_dataset_smart(data, output_file="growth_centric_smart_
     ]
     base_cols = [c for c in keep_cols if c in data.columns]
 
-    # 2. Batch Indices
-    # Growth
+    # 2. Batch Indices & Parameters
+    
+    # A. Growth (61 steps, 8 cols each)
+    # We need the numeric date to calculate the window
     growth_name_idx = column_name_to_index(data, "cultures-organism detected_1")
-    growth_date_idx = column_name_to_index(data, "cultures-collection date-days from reference_1")
+    growth_date_idx = column_name_to_index(data, "cultures-collection date-days from reference_1") # DAYS
     growth_steps, growth_step_size = 61, 8
     
-    # Susceptibility
+    # B. Susceptibility (65 steps, 5 cols each)
     susc_abx_idx = column_name_to_index(data, "organisms susceptability-antibiotic_1")
     susc_org_idx = column_name_to_index(data, "organisms susceptability-microorganism_1")
     susc_res_idx = column_name_to_index(data, "organisms susceptability-susceptibility interpretation_1")
     susc_steps, susc_step_size = 65, 5
     
-    # Treatments (Given)
+    # C. Treatments Given (108 steps, 3 cols each)
+    # We need the numeric hours to compare with growth time
     tx_med_idx = column_name_to_index(data, "antibiotics-medication_1")
-    tx_date_idx = column_name_to_index(data, "antibiotics-date administered_1")
+    tx_date_str_idx = column_name_to_index(data, "antibiotics-date administered_1")
+    tx_date_hrs_idx = column_name_to_index(data, "antibiotics-date administered-hours from reference_1") # HOURS
     tx_steps, tx_step_size = 108, 3
 
+    # Timeframe Window (Hours)
+    WINDOW_PRE = 10   # 10 hours before
+    WINDOW_POST = 72  # 72 hours after
+
     new_rows = []
+    
+    # Stats
+    stats_patients_with_growth = set()
+    stats_abx_relevant_count = [] 
+    stats_max_susc_multiplicity = 1 
 
     for idx, row in data.iterrows():
+        patient_id = row["patient id"]
+
+        # --- A. Pre-load ALL Treatments for this Patient ---
+        # List of tuples: (Normalized_Name, Date_String, Hours_Float)
+        patient_treatments = []
         
-        # --- A. Build Treatment Lookup for this Patient ---
-        # Dictionary: { Normalized_Abx_Name : First_Date_Given }
-        tx_map = {}
         for i in range(tx_steps):
             m_idx = tx_med_idx + (i * tx_step_size)
-            d_idx = tx_date_idx + (i * tx_step_size)
+            d_str_idx = tx_date_str_idx + (i * tx_step_size)
+            d_hrs_idx = tx_date_hrs_idx + (i * tx_step_size)
+            
             if m_idx >= len(row): break
             
-            raw_med = str(row.iloc[m_idx]).strip()
-            raw_date = str(row.iloc[d_idx]).strip()
-            
-            if raw_med and raw_med not in ["", "nan", "None"]:
-                norm_name = _sanitize_antibiotic_name(raw_med) # NORMALIZE
-                if norm_name and norm_name not in tx_map:
-                    tx_map[norm_name] = raw_date # Store first date found
-        
-        # --- B. Build Susceptibility Map ---
-        # Dictionary: Organism -> { Normalized_Abx_Name : Result }
-        susc_map = defaultdict(dict)
+            raw_med = row.iloc[m_idx]
+            if pd.notna(raw_med) and str(raw_med).strip() not in ["", "nan", "None", "0"]:
+                
+                # Get Timing
+                try:
+                    hrs_val = float(row.iloc[d_hrs_idx])
+                except (ValueError, TypeError):
+                    hrs_val = None # Cannot use for time filtering if missing numeric time
+                
+                date_str = str(row.iloc[d_str_idx]).strip()
+                norm_name = _sanitize_antibiotic_name_v2(raw_med)
+                
+                if norm_name:
+                    patient_treatments.append({
+                        "name": norm_name,
+                        "date_str": date_str,
+                        "hours": hrs_val
+                    })
+
+        # --- B. Build Susceptibility Map (Handle Multiples) ---
+        susc_map = defaultdict(lambda: defaultdict(list))
         for i in range(susc_steps):
             o_idx = susc_org_idx + (i * susc_step_size)
             a_idx = susc_abx_idx + (i * susc_step_size)
             r_idx = susc_res_idx + (i * susc_step_size)
             if r_idx >= len(row): break
             
-            s_org = str(row.iloc[o_idx]).strip().upper()
-            raw_abx = str(row.iloc[a_idx]).strip()
-            s_res = str(row.iloc[r_idx]).strip()
+            s_org = row.iloc[o_idx]
+            raw_abx = row.iloc[a_idx]
+            s_res = row.iloc[r_idx]
             
-            if s_org and raw_abx and s_res:
-                norm_abx = _sanitize_antibiotic_name(raw_abx) # NORMALIZE
-                susc_map[s_org][norm_abx] = s_res
+            if pd.notna(s_org) and pd.notna(raw_abx) and pd.notna(s_res):
+                s_org_str = str(s_org).strip().upper()
+                raw_abx_str = str(raw_abx).strip()
+                s_res_str = str(s_res).strip().upper()
+
+                if s_org_str and raw_abx_str and s_res_str not in ["", "NAN", "NONE"]:
+                    norm_abx = _sanitize_antibiotic_name_v2(raw_abx_str)
+                    susc_map[s_org_str][norm_abx].append(s_res_str)
 
         # --- C. Iterate Growths ---
+        patient_had_growth = False
+        
         for i in range(growth_steps):
             g_name_i = growth_name_idx + (i * growth_step_size)
             g_date_i = growth_date_idx + (i * growth_step_size)
             if g_name_i >= len(row): break
             
-            growth_name = str(row.iloc[g_name_i]).strip()
-            growth_date = str(row.iloc[g_date_i]).strip()
+            growth_name = row.iloc[g_name_i]
+            growth_days_val = row.iloc[g_date_i] # This is in DAYS
             
-            # VALID GROWTH FOUND
-            if growth_name and growth_name not in ["", "nan", "None", "0"]:
-                new_row = {col: row[col] for col in base_cols}
-                new_row['Target_Growth_Name'] = growth_name
-                new_row['Target_Growth_Date'] = growth_date
+            # Check Valid Growth
+            if pd.notna(growth_name) and str(growth_name).strip() not in ["", "nan", "None", "0"]:
+                growth_name_str = str(growth_name).strip()
                 
-                # Check Susceptibility for this specific organism
-                my_susc = susc_map.get(growth_name.upper(), {})
+                # Calculate Growth Time in Hours
+                growth_hours = None
+                try:
+                    growth_hours = float(growth_days_val) * 24.0
+                except (ValueError, TypeError):
+                    growth_hours = None # Cannot filter accurately if missing time
                 
-                # For every antibiotic tested in the panel, add 2 columns
-                for abx_norm, result in my_susc.items():
-                    # 1. The Result (S/R/I)
-                    new_row[f"{abx_norm}_Res"] = result
+                patient_had_growth = True
+                
+                # --- Filter Treatments for THIS Growth ---
+                # We want a map: {Abx_Name: Date_String} 
+                # BUT only if the Abx time is within [growth - 10, growth + 72]
+                relevant_tx_map = {}
+                count_relevant = 0
+                
+                if growth_hours is not None:
+                    window_start = growth_hours - WINDOW_PRE
+                    window_end = growth_hours + WINDOW_POST
                     
-                    # 2. The Treatment Date (Look up in tx_map)
-                    date_given = tx_map.get(abx_norm, "") # Empty if not treated
+                    for tx in patient_treatments:
+                        if tx["hours"] is not None:
+                            # Strict Time Filter
+                            if window_start <= tx["hours"] <= window_end:
+                                # Found a match!
+                                if tx["name"] not in relevant_tx_map:
+                                    relevant_tx_map[tx["name"]] = tx["date_str"]
+                                    count_relevant += 1
+                        else:
+                            # Fallback: If abx has no time, do we include it? 
+                            # Usually safest to exclude to avoid noise, or include with flag.
+                            # For strict analysis, we exclude.
+                            pass
+                else:
+                    # If Growth has no date, we can't filter. 
+                    # Decision: Include nothing (safest) or everything? 
+                    # Assuming data is clean, we skip.
+                    pass
+
+                stats_abx_relevant_count.append(count_relevant)
+
+                # --- Create Row ---
+                new_row = {col: row[col] for col in base_cols}
+                new_row['Target_Growth_Name'] = growth_name_str
+                # Keep original days string/val
+                new_row['Target_Growth_Date_Days'] = str(growth_days_val) 
+                
+                # Get susceptibility results
+                my_susc_dict = susc_map.get(growth_name_str.upper(), {})
+                
+                for abx_norm, results_list in my_susc_dict.items():
+                    if len(results_list) > stats_max_susc_multiplicity:
+                        stats_max_susc_multiplicity = len(results_list)
+                    
+                    # Susceptibility Results
+                    new_row[f"{abx_norm}_Res"] = results_list[0]
+                    for k in range(1, len(results_list)):
+                        new_row[f"{abx_norm}_Res_test{k+1}"] = results_list[k]
+                    
+                    # Date Given (Only if in relevant_tx_map)
+                    date_given = relevant_tx_map.get(abx_norm, "")
                     new_row[f"{abx_norm}_Date_Given"] = date_given
                 
                 new_rows.append(new_row)
+        
+        if patient_had_growth:
+            stats_patients_with_growth.add(patient_id)
 
+    # --- D. Finalize & Stats ---
     output_df = pd.DataFrame(new_rows)
+    
+    # Calc Stats
+    num_growths = len(output_df)
+    num_patients = len(stats_patients_with_growth)
+    
+    if stats_abx_relevant_count:
+        min_abx = min(stats_abx_relevant_count)
+        max_abx = max(stats_abx_relevant_count)
+        avg_abx = sum(stats_abx_relevant_count) / len(stats_abx_relevant_count)
+    else:
+        min_abx, max_abx, avg_abx = 0, 0, 0
+
+    print("="*50)
+    print("      SMART ANALYSIS STATISTICS (V3)      ")
+    print(f"      Filter Window: -{WINDOW_PRE}h to +{WINDOW_POST}h")
+    print("="*50)
+    print(f"Total Growth Rows: {num_growths}")
+    print(f"Unique Patients with Growth: {num_patients}")
+    print("-" * 30)
+    print("Relevant Antibiotics (within timeframe) per Growth:")
+    print(f"  Min: {min_abx}")
+    print(f"  Max: {max_abx}")
+    print(f"  Avg: {avg_abx:.2f}")
+    print("-" * 30)
+    print(f"Max Susceptibility Tests for single Abx: {stats_max_susc_multiplicity}")
+    print("="*50)
+
     output_df.to_csv(output_file, index=False, encoding='utf-8-sig')
-    print(f"Smart Growth-Centric dataset saved to {output_file} ({len(output_df)} rows).")
+    print(f"Smart Growth-Centric dataset saved to {output_file}")
+    return output_df
 
 def create_growth_centric_dataset_raw(data, output_file="growth_centric_RAW_for_review.csv"):
     """
@@ -2698,14 +2807,14 @@ def main():
 
     # --- INSERT THIS BLOCK ---
     
-    # 1. Generate Smart Analysis (Matches Treatment Dates to Susceptibility)
-    create_growth_centric_dataset_smart(data, output_file="output_smart_growth_analysis.csv")
+    # 1. Generate Smart Analysis V3 (Time-Filtered + Multi-Test Support)
+    create_growth_centric_dataset_smart_v3(data, output_file="output_smart_growth_analysis_filtered.csv")
 
     # 2. Generate Raw Review File (Full 8-col growth batch + Full Context)
     create_growth_centric_dataset_raw(data, output_file="output_raw_growth_review.csv")
     
     # -------------------------
-    
+
     save_data(data, output_filepath)
     #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
 
