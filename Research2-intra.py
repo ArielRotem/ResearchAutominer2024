@@ -1951,7 +1951,7 @@ def create_growth_centric_dataset_smart_v9(data, output_file="growth_centric_sma
                 
                 # --- CHANGE 1: GBS FIX ---
                 if "STREPTOCOCCUS AGALACTIAE (GBS)" in s_org_str: s_org_str = "STREPTOCOCCUS AGALACTIAE"
-                if "STAPHYLOCOCCUS HOMINIS (COAG. NEG. STAPH" in part: part = "STAPHYLOCOCCUS HOMINIS"
+                if "STAPHYLOCOCCUS HOMINIS (COAG. NEG. STAPH" in s_org_str: s_org_str = "STAPHYLOCOCCUS HOMINIS"
                 
                 raw_abx_str = str(raw_abx).strip().upper() # Uppercase for consistency
                 s_res_str = str(s_res).strip().upper()
