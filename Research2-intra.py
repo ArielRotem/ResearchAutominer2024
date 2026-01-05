@@ -1948,6 +1948,11 @@ def create_growth_centric_dataset_smart_v9(data, output_file="growth_centric_sma
             
             if pd.notna(s_org) and pd.notna(raw_abx) and pd.notna(s_res):
                 s_org_str = str(s_org).strip().upper()
+                
+                # --- CHANGE 1: GBS FIX ---
+                if "STREPTOCOCCUS AGALACTIAE (GBS)" in s_org_str: s_org_str = "STREPTOCOCCUS AGALACTIAE"
+                if "STAPHYLOCOCCUS HOMINIS (COAG. NEG. STAPH" in part: part = "STAPHYLOCOCCUS HOMINIS"
+                
                 raw_abx_str = str(raw_abx).strip().upper() # Uppercase for consistency
                 s_res_str = str(s_res).strip().upper()
 
@@ -2006,10 +2011,18 @@ def create_growth_centric_dataset_smart_v9(data, output_file="growth_centric_sma
                         new_row[f"{prefix}_Date"] = tx["date_str"]
                         new_row[f"{prefix}_Hours"] = tx["hours_str"]
 
-                # --- E. Susceptibility Columns ---
-                my_susc_dict = susc_map.get(growth_name_str.upper(), {})
+                # --- E. Susceptibility Columns (CHANGE 2: SPLIT & AGGREGATE) ---
+                growth_parts = [p.strip().upper() for p in growth_name_str.split(';')]
+                combined_susc = defaultdict(list)
                 
-                for lab_abx_name, results_list in my_susc_dict.items():
+                for part in growth_parts:
+                    if "STREPTOCOCCUS AGALACTIAE (GBS)" in part: part = "STREPTOCOCCUS AGALACTIAE"
+                    if "STAPHYLOCOCCUS HOMINIS (COAG. NEG. STAPH" in part: part = "STAPHYLOCOCCUS HOMINIS"
+                    part_results = susc_map.get(part, {})
+                    for abx, res_list in part_results.items():
+                        combined_susc[abx].extend(res_list)
+
+                for lab_abx_name, results_list in combined_susc.items():
                     if len(results_list) > stats_max_susc_multiplicity:
                         stats_max_susc_multiplicity = len(results_list)
                     
@@ -2029,13 +2042,13 @@ def create_growth_centric_dataset_smart_v9(data, output_file="growth_centric_sma
     count_before = len(output_df)
     output_df = output_df.drop_duplicates(subset=['patient id', 'Target_Growth_Name', 'Target_Growth_Date_Days'])
     count_after = len(output_df)
-    unique_patients_final = output_df['patient id'].nunique()
+    unique_patients_final = output_df['patient id'].nunique() if not output_df.empty else 0
 
     print(f"Deduplication: Removed {count_before - count_after} duplicate rows.")
     print(f"Final Dataset: {count_after} unique growth events from {unique_patients_final} patients.")
 
     num_growths = len(output_df)
-    num_patients = len(stats_patients_with_growth)
+    num_patients = unique_patients_final # Use validated count
     
     if not output_df.empty:
         cols = list(output_df.columns)
@@ -2162,6 +2175,45 @@ def create_growth_centric_dataset_raw(data, output_file="growth_centric_RAW_for_
         print(f"RAW Growth-Centric dataset saved to {output_file} ({len(output_df)} rows).")
 
     return output_df
+
+def debug_growth_susc_pairs(data):
+    print("Scanning for unique Growth <-> Susceptibility Name pairs...")
+    
+    # 1. Get Column Indices
+    g_idx = column_name_to_index(data, "cultures-organism detected_1")
+    s_idx = column_name_to_index(data, "organisms susceptability-microorganism_1")
+    
+    unique_pairs = set()
+
+    # 2. Iterate Patients
+    for _, row in data.iterrows():
+        # Get all Growths for this patient
+        pat_growths = set()
+        for i in range(61):
+            val = row.iloc[g_idx + (i * 8)]
+            if pd.notna(val) and str(val).strip() not in ["", "nan"]:
+                pat_growths.add(str(val).strip().upper())
+        
+        # Get all Susc Organisms for this patient
+        pat_suscs = set()
+        for i in range(65):
+            val = row.iloc[s_idx + (i * 5)]
+            if pd.notna(val) and str(val).strip() not in ["", "nan"]:
+                pat_suscs.add(str(val).strip().upper())
+        
+        # Cross-match: If a patient has Growth A and Susc B, record (A, B)
+        for g in pat_growths:
+            for s in pat_suscs:
+                if g != s: # Only interested in MISMATCHES (potential aliasing issues)
+                    unique_pairs.add((g, s))
+
+    # 3. Print
+    print(f"Found {len(unique_pairs)} non-identical pairs occurring in the same patients.")
+    print("-" * 60)
+    print(f"{'GROWTH NAME':<40} | {'SUSCEPTIBILITY NAME'}")
+    print("-" * 60)
+    for g, s in sorted(list(unique_pairs)):
+        print(f"{g:<40} | {s}")
 
 
 organism_dict = {
@@ -3035,5 +3087,8 @@ def main():
     save_data(data, output_filepath)
     #split_and_save_csv(data, 'fever temperature numeric_max 37.5-43-numeric result', 'output.csv', 'output_under_38.csv', 'output_38_or_above.csv', encoding='utf-8')
 
+
+    # Run it immediately
+    debug_growth_susc_pairs(data)
 if __name__ == "__main__":
     main()
