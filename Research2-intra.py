@@ -2026,6 +2026,14 @@ def create_growth_centric_dataset_smart_v9(data, output_file="growth_centric_sma
     # --- F. Finalize & Sort Columns ---
     output_df = pd.DataFrame(new_rows)
     
+    count_before = len(output_df)
+    output_df = output_df.drop_duplicates(subset=['patient id', 'Target_Growth_Name', 'Target_Growth_Date_Days'])
+    count_after = len(output_df)
+    unique_patients_final = output_df['patient id'].nunique()
+
+    print(f"Deduplication: Removed {count_before - count_after} duplicate rows.")
+    print(f"Final Dataset: {count_after} unique growth events from {unique_patients_final} patients.")
+
     num_growths = len(output_df)
     num_patients = len(stats_patients_with_growth)
     
