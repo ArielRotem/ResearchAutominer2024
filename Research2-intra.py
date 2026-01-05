@@ -1951,7 +1951,11 @@ def create_growth_centric_dataset_smart_v9(data, output_file="growth_centric_sma
                 
                 # --- CHANGE 1: GBS FIX ---
                 if "STREPTOCOCCUS AGALACTIAE (GBS)" in s_org_str: s_org_str = "STREPTOCOCCUS AGALACTIAE"
+                if "KLEBSIELLA (FORMELY ENTEROBACTER) AEROGENES" in s_org_str: s_org_str = "KLEBSIELLA AEROGENES"
                 if "STAPHYLOCOCCUS HOMINIS (COAG. NEG. STAPH" in s_org_str: s_org_str = "STAPHYLOCOCCUS HOMINIS"
+                if "STAPHYLOCOCCUS CAPITIS (COAG. NEG. STAPH" in s_org_str: s_org_str = "STAPHYLOCOCCUS CAPITIS"
+                if "STAPHYLOCOCCUS EPIDERMIDIS (COAG. NEG. STAPH" in s_org_str: s_org_str = "STAPHYLOCOCCUS EPIDERMIDIS"
+                if "STAPHYLOCOCCUS WARNERI (COAG. NEG. STAPH" in s_org_str: s_org_str = "STAPHYLOCOCCUS WARNERI"
                 
                 raw_abx_str = str(raw_abx).strip().upper() # Uppercase for consistency
                 s_res_str = str(s_res).strip().upper()
@@ -2017,7 +2021,11 @@ def create_growth_centric_dataset_smart_v9(data, output_file="growth_centric_sma
                 
                 for part in growth_parts:
                     if "STREPTOCOCCUS AGALACTIAE (GBS)" in part: part = "STREPTOCOCCUS AGALACTIAE"
+                    if "KLEBSIELLA (FORMELY ENTEROBACTER) AEROGENES" in part: part = "KLEBSIELLA AEROGENES"
                     if "STAPHYLOCOCCUS HOMINIS (COAG. NEG. STAPH" in part: part = "STAPHYLOCOCCUS HOMINIS"
+                    if "STAPHYLOCOCCUS CAPITIS (COAG. NEG. STAPH" in part: part = "STAPHYLOCOCCUS CAPITIS"
+                    if "STAPHYLOCOCCUS EPIDERMIDIS (COAG. NEG. STAPH" in part: part = "STAPHYLOCOCCUS EPIDERMIDIS"
+                    if "STAPHYLOCOCCUS WARNERI (COAG. NEG. STAPH" in part: part = "STAPHYLOCOCCUS WARNERI"
                     part_results = susc_map.get(part, {})
                     for abx, res_list in part_results.items():
                         combined_susc[abx].extend(res_list)
@@ -3089,6 +3097,6 @@ def main():
 
 
     # Run it immediately
-    debug_growth_susc_pairs(data)
+    #debug_growth_susc_pairs(data)
 if __name__ == "__main__":
     main()
